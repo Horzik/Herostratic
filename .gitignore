@@ -1,0 +1,11 @@
+# Don't commit Python cache
+__pycache__/
+data/__pycache__/
+scraper/__pycache__/
+*.py[cod]
+
+# Don't commit IDE settings
+.idea/
+
+# Don't commit virtual environment
+.venv/

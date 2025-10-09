@@ -1,7 +1,6 @@
 https://aktualne.cz
 https://irozhlas.cz
 https://denikalarm.cz/
-https://pribram.cz
 https://tn.nova.cz
 https://parlamentnilisty.cz
 https://echo24.cz
@@ -22,3 +21,7 @@ https://policie.gov.cz/sprava-jihomoravskeho-kraje-zpravodajstvi.aspx
 https://policie.gov.cz/zpravodajstvi-zlinskeho-kraje.aspx
 https://policie.gov.cz/krajske-reditelstvi-olomouckeho-kraje-zpravodajstvi.aspx
 https://policie.gov.cz/krajske-reditelstvi-severomoravskeho-kraje-zpravodajstvi.aspx
+https://praha.cz
+https://brno.cz
+https://hradeckralove.cz/
+https://pribram.cz

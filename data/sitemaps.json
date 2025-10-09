@@ -213,10 +213,29 @@
   "https://metro.cz": [
     "https://www.metro.cz/sitemap?type=sitemap"
   ],
+  "https://e15.cz": [
+    "https://www.e15.cz/sitemap.xml",
+    "https://www.e15.cz/sitemap-news.xml",
+    "https://www.e15.cz/sitemap-elections.xml",
+    "https://www.e15.cz/sitemap-sections.xml"
+  ],
   "https://tydenikpolicie.cz": [
     "https://tydenikpolicie.cz/sitemap.xml"
   ],
-  "https://tn.nova.cz/": [
-    "https://tn.nova.cz/api/v1/sitemap?type=news&category=tnnova-2&extensions=all"
+  "https://plzen.cz/": [
+    "https://www.plzen.cz/sitemap.xml"
+  ],
+  "https://zlin.cz": [
+    "https://zlin.cz/page-sitemap.xml",
+    "https://zlin.cz/zpravy-sitemap4.xml",
+    "https://zlin.cz/akce-sitemap2.xml",
+    "https://zlin.cz/category-sitemap.xml",
+    "https://zlin.cz/post_tag-sitemap.xml",
+    "https://zlin.cz/kategorie-sitemap.xml",
+    "https://zlin.cz/region-sitemap.xml",
+    "https://zlin.cz/druh_akce-sitemap.xml"
+  ],
+  "https://liberec.cz": [
+    "https://www.liberec.cz/sitemap.xml"
   ]
 }
