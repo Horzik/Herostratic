@@ -1,0 +1,222 @@
+{
+  "https://idnes.cz": [
+    "https://www.idnes.cz/sitemap.xml"
+  ],
+  "https://novinky.cz": [
+    "https://www.novinky.cz/sitemaps/sitemap_articles.xml",
+    "https://www.novinky.cz/sitemaps/sitemap_news.xml",
+    "https://www.novinky.cz/sitemaps/sitemap_sections.xml",
+    "https://www.novinky.cz/sitemaps/sitemap_tags.xml"
+  ],
+  "https://ct24.ceskatelevize.cz": [
+    "https://ct24.ceskatelevize.cz/sitemaps/sitemap_articles.xml",
+    "https://ct24.ceskatelevize.cz/sitemaps/sitemap_news.xml",
+    "https://ct24.ceskatelevize.cz/sitemaps/sitemap_sections.xml",
+    "https://ct24.ceskatelevize.cz/sitemaps/sitemap_navigation.xml",
+    "https://ct24.ceskatelevize.cz/sitemaps/sitemap_tags.xml",
+    "https://ct24.ceskatelevize.cz/sitemaps/sitemap_videos.xml",
+    "https://ct24.ceskatelevize.cz/sitemaps/sitemap_images.xml"
+  ],
+  "https://seznamzpravy.cz": [
+    "https://www.seznamzpravy.cz/sitemaps/sitemap_articles.xml",
+    "https://www.seznamzpravy.cz/sitemaps/sitemap_news.xml",
+    "https://www.seznamzpravy.cz/sitemaps/sitemap_sections.xml",
+    "https://www.seznamzpravy.cz/sitemaps/sitemap_tags.xml",
+    "https://www.seznamzpravy.cz/sitemaps-campus/sitemap_sections.xml",
+    "https://www.seznamzpravy.cz/sitemaps-campus/sitemap_schools.xml"
+  ],
+  "https://denik.cz": [
+    "https://www.denik.cz/sitemap.xml"
+  ],
+  "https://blesk.cz": [
+    "https://www.blesk.cz/sitemap.xml",
+    "https://www.blesk.cz/sitemap-news.xml",
+    "https://www.blesk.cz/sitemap-image.xml",
+    "https://www.blesk.cz/sitemap-videoarticle.xml",
+    "https://www.blesk.cz/sitemap-elections.xml",
+    "https://www.blesk.cz/sitemap-sections.xml"
+  ],
+  "https://www.ahaonline.cz/": [
+    "https://www.ahaonline.cz/sitemap.xml"
+  ],
+  "https://forum24.cz": [
+    "https://www.forum24.cz/theme/sitemap.xml"
+  ],
+  "https://brnensky.denik.cz": [
+    "https://brnensky.denik.cz/sitemap.xml"
+  ],
+  "https://moravskoslezsky.denik.cz": [
+    "https://moravskoslezsky.denik.cz/sitemap.xml"
+  ],
+  "https://zlinsky.denik.cz": [
+    "https://zlinsky.denik.cz/sitemap.xml"
+  ],
+  "https://plzensky.denik.cz": [
+    "https://plzensky.denik.cz/sitemap.xml"
+  ],
+  "https://pardubicky.denik.cz": [
+    "https://pardubicky.denik.cz/sitemap.xml"
+  ],
+  "https://hradecky.denik.cz": [
+    "https://hradecky.denik.cz/sitemap.xml"
+  ],
+  "https://liberecky.denik.cz": [
+    "https://liberecky.denik.cz/sitemap.xml"
+  ],
+  "https://jihlavsky.denik.cz": [
+    "https://jihlavsky.denik.cz/sitemap.xml"
+  ],
+  "https://olomoucky.denik.cz": [
+    "https://olomoucky.denik.cz/sitemap.xml"
+  ],
+  "https://ustecky.denik.cz": [
+    "https://ustecky.denik.cz/sitemap.xml"
+  ],
+  "https://karlovarsky.denik.cz": [
+    "https://karlovarsky.denik.cz/sitemap.xml"
+  ],
+  "https://stredocesky.denik.cz": [
+    "https://www.denik.cz/sitemap.xml"
+  ],
+  "https://budejovicky.denik.cz": [
+    "https://ceskobudejovicky.denik.cz/sitemap.xml"
+  ],
+  "https://jablonecky.denik.cz": [
+    "https://jablonecky.denik.cz/sitemap.xml"
+  ],
+  "https://prostejovsky.denik.cz": [
+    "https://prostejovsky.denik.cz/sitemap.xml"
+  ],
+  "https://trebicsky.denik.cz": [
+    "https://trebicsky.denik.cz/sitemap.xml"
+  ],
+  "https://havlickobrodsky.denik.cz": [
+    "https://havlickobrodsky.denik.cz/sitemap.xml"
+  ],
+  "https://blanensky.denik.cz": [
+    "https://blanensky.denik.cz/sitemap.xml"
+  ],
+  "https://kromerizsky.denik.cz": [
+    "https://kromerizsky.denik.cz/sitemap.xml"
+  ],
+  "https://orlicky.denik.cz": [
+    "https://orlicky.denik.cz/sitemap.xml"
+  ],
+  "https://berounsky.denik.cz": [
+    "https://berounsky.denik.cz/sitemap.xml"
+  ],
+  "https://kladensky.denik.cz": [
+    "https://kladensky.denik.cz/sitemap.xml"
+  ],
+  "https://melnicky.denik.cz": [
+    "https://melnicky.denik.cz/sitemap.xml"
+  ],
+  "https://nymbursky.denik.cz": [
+    "https://nymbursky.denik.cz/sitemap.xml"
+  ],
+  "https://rakovnicky.denik.cz": [
+    "https://rakovnicky.denik.cz/sitemap.xml"
+  ],
+  "https://kolinsky.denik.cz": [
+    "https://kolinsky.denik.cz/sitemap.xml"
+  ],
+  "https://kutnohorsky.denik.cz": [
+    "https://kutnohorsky.denik.cz/sitemap.xml"
+  ],
+  "https://strakonicky.denik.cz": [
+    "https://strakonicky.denik.cz/sitemap.xml"
+  ],
+  "https://prachaticky.denik.cz": [
+    "https://prachaticky.denik.cz/sitemap.xml"
+  ],
+  "https://pisecky.denik.cz": [
+    "https://pisecky.denik.cz/sitemap.xml"
+  ],
+  "https://taborsky.denik.cz": [
+    "https://taborsky.denik.cz/sitemap.xml"
+  ],
+  "https://jindrichohradecky.denik.cz": [
+    "https://jindrichohradecky.denik.cz/sitemap.xml"
+  ],
+  "https://ceskobudejovicky.denik.cz": [
+    "https://ceskobudejovicky.denik.cz/sitemap.xml"
+  ],
+  "https://chebsky.denik.cz": [
+    "https://chebsky.denik.cz/sitemap.xml"
+  ],
+  "https://zpravypribram.cz": [
+    "https://www.zpravypribram.cz/sitemap.xml",
+    "https://www.zpravypribram.cz/news-sitemap.xml"
+  ],
+  "https://lidovky.cz": [
+    "https://www.lidovky.cz/sitemap.xml"
+  ],
+  "https://reflex.cz": [
+    "https://www.reflex.cz/sitemap.xml",
+    "https://www.reflex.cz/sitemap-image.xml",
+    "https://www.reflex.cz/sitemap-videoarticle.xml",
+    "https://www.reflex.cz/sitemap-news.xml",
+    "https://www.reflex.cz/sitemap-elections.xml",
+    "https://www.reflex.cz/sitemap-sections.xml"
+  ],
+  "https://expres.cz": [
+    "https://www.expres.cz/sitemap?type=sitemap"
+  ],
+  "https://hanacka.drbna.cz": [
+    "https://hanacka.drbna.cz/sitemap-01.xml",
+    "https://hanacka.drbna.cz/sitemap-02.xml"
+  ],
+  "https://budejcka.drbna.cz": [
+    "https://budejcka.drbna.cz/sitemap-01.xml",
+    "https://budejcka.drbna.cz/sitemap-02.xml",
+    "https://budejcka.drbna.cz/sitemap-03.xml"
+  ],
+  "https://hradecka.drbna.cz": [
+    "https://hradecka.drbna.cz/sitemap-01.xml",
+    "https://hradecka.drbna.cz/sitemap-02.xml"
+  ],
+  "https://plzenska.drbna.cz": [
+    "https://plzenska.drbna.cz/sitemap-01.xml"
+  ],
+  "https://prazska.drbna.cz": [
+    "https://prazska.drbna.cz/sitemap-01.xml"
+  ],
+  "https://karlovarska.drbna.cz": [
+    "https://karlovarska.drbna.cz/sitemap-01.xml"
+  ],
+  "https://ostravska.drbna.cz": [
+    "https://ostravska.drbna.cz/sitemap-01.xml"
+  ],
+  "https://brnenska.drbna.cz": [
+    "https://brnenska.drbna.cz/sitemap-01.xml"
+  ],
+  "https://liberecka.drbna.cz": [
+    "https://liberecka.drbna.cz/sitemap-01.xml",
+    "https://liberecka.drbna.cz/sitemap-02.xml"
+  ],
+  "https://pardubicka.drbna.cz": [
+    "https://www.drbna.cz/sitemap-01.xml"
+  ],
+  "https://zlinska.drbna.cz": [
+    "https://www.drbna.cz/sitemap-01.xml"
+  ],
+  "https://ustecka.drbna.cz": [
+    "https://www.drbna.cz/sitemap-01.xml"
+  ],
+  "https://jihlavska.drbna.cz": [
+    "https://jihlavska.drbna.cz/sitemap-01.xml"
+  ],
+  "https://cnn.iprima.cz": [
+    "https://cnn.iprima.cz/sitemap.xml",
+    "https://cnn.iprima.cz/sitemap-google-news.xml"
+  ],
+  "https://metro.cz": [
+    "https://www.metro.cz/sitemap?type=sitemap"
+  ],
+  "https://tydenikpolicie.cz": [
+    "https://tydenikpolicie.cz/sitemap.xml"
+  ],
+  "https://tn.nova.cz/": [
+    "https://tn.nova.cz/api/v1/sitemap?type=news&category=tnnova-2&extensions=all"
+  ]
+}
