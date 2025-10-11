@@ -14,10 +14,5 @@ scraper/__pycache__/
 sites.txt
 police_sites.txt
 
-# Output files
-sitemaps.json
-articles.json
-deduped.json
-index.html
-nositemaps.txt
-police_archives.txt
+# Output directory (gets created if not existing, see "config.py")
+/data/output

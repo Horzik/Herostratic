@@ -6,10 +6,15 @@ DATA_DIR = ROOT / "data"
 OUTPUT_DIR = DATA_DIR / "output"
 INPUT_DIR = DATA_DIR / "input"
 
+# Create the "output" dir if it doesn't exist
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Input
 SITES_FP = INPUT_DIR / "sites.txt"
 POLICE_SITES_FP = INPUT_DIR / "police_sites.txt"
 BASE_POLICE_URL = "https://policie.gov.cz/"
 
+# Output
 SITEMAPS_FP = OUTPUT_DIR / "sitemaps.json"
 NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
 ARTICLES_FP = OUTPUT_DIR / "articles.json"
