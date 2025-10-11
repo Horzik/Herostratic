@@ -8,12 +8,11 @@ import json
 import xml.etree.ElementTree as ET
 
 from functools import partial
+from network_utils import create_session, get_bytes
 from config import (
     SITEMAPS_FP,
     ARTICLES_FP,
     URL_KEYWORDS,
-    MAX_RETRIES,
-    TIMEOUT,
     URL_EL,
     LOC_EL,
     SITEMAP_INDEX_EL
@@ -52,7 +51,7 @@ async def parse_xml_tag(content_bytes: bytes, url: str) -> ET.Element | None:
     return None
 
 
-async def extract_sitemap_urls(root: ET.Element, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> list:
+async def extract_sitemap_urls(root: ET.Element, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> list[str]:
     # Get the sitemap urls from the tag
     sitemap_urls = root.findall(SITEMAP_INDEX_EL)
     # Create coroutine tasks, schedule and wait
@@ -64,68 +63,28 @@ async def extract_sitemap_urls(root: ET.Element, session: aiohttp.ClientSession,
 
 
 def extract_article_urls(root: ET.Element):
+    # Get the tags which contain the urls
     urls = []
-    # Get the tags that contain the urls
     url_elements = root.findall(URL_EL)
+
+    # todo: Try deduping same article urls
+    # seen_slugs = {}
+
     for url_elem in url_elements:
         # Get the actual url
         loc = url_elem.find(LOC_EL)
         if loc is not None:
             # Filter the URLs based on keywords
             if any(keyword in loc.text for keyword in URL_KEYWORDS):
+                # todo: Dedupe by article key
+                # slug = get_article_key(loc.text)
+                # if slug not in seen_slugs:
+                #     seen_slugs.add(slug)
+                #     urls.append(loc.text)
+                #     print(loc.text)
                 print(loc.text)
                 urls.append(loc.text)
     return urls
-
-
-async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> bytes | None:
-    async with semaphore:
-        for attempt in range(MAX_RETRIES):
-            # Incrementally increase the wait time
-            wait_time = 2 ** attempt
-            try:
-                # Make the http request
-                async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=TIMEOUT)) as response:
-
-                    if response.status == 200:
-                        print(f"Success for {url}, attempt {attempt + 1}")
-                        content_bytes = await response.read()
-                        return content_bytes
-                    elif response.status == 429:
-                        print(f"429 for {url}, attempt {attempt + 1}, waiting extra long")
-                        if attempt < MAX_RETRIES - 1:
-                            await asyncio.sleep(wait_time + 10)
-                            continue
-                        else:
-                            return None
-                    elif response.status in [500, 502, 503, 504]:  # Retry-able errors
-                        print(f"HTTP {response.status} for {url}, attempt {attempt + 1}/{MAX_RETRIES}")
-                        if attempt < MAX_RETRIES - 1:
-                            await asyncio.sleep(wait_time)
-                            continue
-                        else:
-                            return None
-                    else:  # 404, 403, 400, etc - don't retry
-                        print(f"HTTP {response.status} for {url}, not retrying")
-                        return None
-
-            # Catch exceptions
-            # todo create an error log (and other logs)
-            except aiohttp.ClientConnectionError as e:
-                print(f"Connection error for {url}, (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
-            except asyncio.TimeoutError as e:
-                print(f"Timeout for {url}, (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
-            except aiohttp.ClientError as e:
-                print(f"HTTPError for {url}, (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
-            # Retry
-            if attempt < MAX_RETRIES - 1:
-                print(f"Retrying in...")
-                await asyncio.sleep(wait_time)
-            else:
-                print(f"Failed parsing {url}, skipping")
-                return None
-        # Return so that linter stays happy :))
-        return None
 
 
 async def parse_single_map(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> list[str]:
@@ -175,6 +134,7 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
         try:
             async with aiofiles.open(ARTICLES_FP, 'r') as f:
                 content = await f.read()
+                # Load the json asynchronously with a running loop
                 loop = asyncio.get_running_loop()
                 data = await loop.run_in_executor(None, json.loads,content)
         except (json.JSONDecodeError, FileNotFoundError):
@@ -200,7 +160,6 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
             raise
     return
 
-
 async def parse_all_sitemaps() -> None:
     # Init concurrency primitives
     semaphore = asyncio.Semaphore(10)
@@ -211,22 +170,10 @@ async def parse_all_sitemaps() -> None:
         content = await f.read()
         sitemaps_data: dict = json.loads(content)
 
-    # Configure HTTP session with connection pooling
-    connector = aiohttp.TCPConnector(
-        limit=100,
-        limit_per_host=30,
-        ttl_dns_cache=500
-    )
+
 
     # Open the session with the context manager
-    async with aiohttp.ClientSession(
-        connector=connector,
-        # Play nice, add the headers
-        headers={
-            'User-Agent': 'SitemapParser/1.0 (learning project)',
-            'Accept': 'application/xml, text/xml, */*',
-        }
-    ) as session:
+    async with create_session() as session:
         # Check each domain
         domain_tasks = [
             process_domain(domain, sitemaps, session, semaphore, file_lock)

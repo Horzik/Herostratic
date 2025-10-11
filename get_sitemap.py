@@ -1,8 +1,8 @@
 import json
-from data.config import SITES_FP, SITEMAPS_FP, NOSITEMAPS_FP
+from config import SITES_FP, SITEMAPS_FP, NOSITEMAPS_FP
 from urllib.robotparser import RobotFileParser
 
-
+# Check if a target page has a sitemap, save it and write the resto to "NOSITEMAPS"
 def main():
     results = {}
     # Read and clean the urls

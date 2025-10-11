@@ -1,12 +1,15 @@
 from pathlib import Path
 
 # Define the file paths
-ROOT = Path(__file__).parent.parent
+ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 SITES_FP = DATA_DIR / "sites.txt"
 SITEMAPS_FP = DATA_DIR / "sitemaps.json"
 NOSITEMAPS_FP = DATA_DIR / "nositemaps.txt"
 ARTICLES_FP = DATA_DIR / "articles.json"
+HTML_FP = DATA_DIR / "index.html"
+DEDUPED_FP = DATA_DIR / "deduped.json"
+POLICE_ARCHIVES_FP = DATA_DIR / "police_archives.json"
 
 # Parsing and scraping filters and keywords
 EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']
