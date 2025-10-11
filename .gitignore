@@ -11,8 +11,8 @@ scraper/__pycache__/
 .venv/
 
 # Input files
-sites.txt
-police_sites.txt
+data/input/sites.txt
+data/input/police_sites.txt
 
 # Output directory (gets created if not existing, see "config.py")
 /data/output
