@@ -3,13 +3,19 @@ from pathlib import Path
 # Define the file paths
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
-SITES_FP = DATA_DIR / "sites.txt"
-SITEMAPS_FP = DATA_DIR / "sitemaps.json"
-NOSITEMAPS_FP = DATA_DIR / "nositemaps.txt"
-ARTICLES_FP = DATA_DIR / "articles.json"
-HTML_FP = DATA_DIR / "index.html"
-DEDUPED_FP = DATA_DIR / "deduped.json"
-POLICE_ARCHIVES_FP = DATA_DIR / "police_archives.json"
+OUTPUT_DIR = DATA_DIR / "output"
+INPUT_DIR = DATA_DIR / "input"
+
+SITES_FP = INPUT_DIR / "sites.txt"
+POLICE_SITES_FP = INPUT_DIR / "police_sites.txt"
+BASE_POLICE_URL = "https://policie.gov.cz/"
+
+SITEMAPS_FP = OUTPUT_DIR / "sitemaps.json"
+NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
+ARTICLES_FP = OUTPUT_DIR / "articles.json"
+HTML_FP = OUTPUT_DIR / "index.html"
+DEDUPED_FP = OUTPUT_DIR / "deduped.json"
+POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.txt"
 
 # Parsing and scraping filters and keywords
 EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']

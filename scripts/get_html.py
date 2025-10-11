@@ -3,7 +3,7 @@ import asyncio
 import aiofiles
 from bs4 import BeautifulSoup
 
-from scraper.network_utils import get_bytes
+from utils.network_utils import get_bytes
 from config import HTML_FP
 
 POLICE_ARCHIVE = "https://policie.gov.cz/clanek/zpravodajstvi-archiv-zpravodajstvi-zpravodajstvi-archiv.aspx"

@@ -8,7 +8,7 @@ import json
 import xml.etree.ElementTree as ET
 
 from functools import partial
-from network_utils import create_session, get_bytes
+from utils.network_utils import create_session, get_bytes
 from config import (
     SITEMAPS_FP,
     ARTICLES_FP,
@@ -132,13 +132,11 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
     # Use a lock for reading and writing
     async with lock:
         try:
+            # Load the json asynchronously with the running loop
             async with aiofiles.open(ARTICLES_FP, 'r') as f:
                 content = await f.read()
-                # Load the json asynchronously with a running loop
                 loop = asyncio.get_running_loop()
                 data = await loop.run_in_executor(None, json.loads,content)
-        except (json.JSONDecodeError, FileNotFoundError):
-            data = {}  # Empty file or corrupt
 
         # Sort the articles
         data[domain] = all_articles
