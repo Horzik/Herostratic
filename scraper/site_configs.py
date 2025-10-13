@@ -2,12 +2,18 @@
 # link = soup.select_one('a[href*="clanek"]')
 # url = link['href']
 # title = link.get_text(strip=True)
+from config import POLICE_ARCHIVES_FP
+
+BASE_POLICE_URL = "https://policie.gov.cz/"
 
 ARCHIVE_SITE_CONFIGS = {
-    "https://policie.gov.cz/": {
+    BASE_POLICE_URL: {
         'listing_selectors':{
-            'article_title': 'a[href*="clanek"]',
-            'article_link': 'a[href*="clanek"]',
+            # Mostly redundant, we are just getting the URLs
+            'article_selector': 'div.article',
+            'article_list': 'div#articleList',
+            'article_title': 'h3 a',
+            'article_link': 'h3 a',
             'article_description': 'div.infobox > p',
             'author': 'p.authorDate',
             'date': 'p.authorDate',
@@ -20,21 +26,24 @@ ARCHIVE_SITE_CONFIGS = {
             'has_documents': 'div.related',
             'document_links': 'div.related a.dark',
         },
+        'archive_selectors': {
+            'municipality': 'div#subHPtitle img',  # Use this and THEN "municipality = element['alt']"
+            'archive_link': 'a[href*="archiv"]',
+            'news_link': 'ul.dots a[href*="zpravodaj"]',
+            'content_archiv': 'div#content a[href*="archiv"]',
+            'zpravodajstvi': 'div#content a[href*="zpravodaj"]',
+        },
         'pagination': {
-            'next_button': 'a.next',
+            'next_page': 'a.next',
         },
         'parsing':{
-            'author': lambda text: text.split('-')[0].strip(),
+            'author': lambda text: ' '.join(text.split()).split('-')[0],
             'date': lambda text: text.split('-')[1].strip(),
+            'description': lambda text: ' '.join(text.split()),
         },
         'rate_limit': 2,
     }
 }
 
-
-GET_ARCHIVE_SITE_CONFIGS = {
-    'archive_link': 'a[href*="archiv"]',
-    'news_link': 'ul.dots a[href*="zpravodaj"]',
-    'content_archiv': 'div#content a[href*="archiv"]',
-    'zpravodajstvi': 'div#content a[href*="zpravodaj"]',
-}
+POLICE_SELECTOR = ARCHIVE_SITE_CONFIGS[BASE_POLICE_URL]
+POLICE_ARCHIVE_SELECTORS = ARCHIVE_SITE_CONFIGS[BASE_POLICE_URL]['archive_selectors']

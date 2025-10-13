@@ -12,7 +12,6 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # Input
 SITES_FP = INPUT_DIR / "sites.txt"
 POLICE_SITES_FP = INPUT_DIR / "police_sites.txt"
-BASE_POLICE_URL = "https://policie.gov.cz/"
 
 # Output
 SITEMAPS_FP = OUTPUT_DIR / "sitemaps.json"
@@ -20,12 +19,13 @@ NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
 ARTICLES_FP = OUTPUT_DIR / "articles.json"
 HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
-POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.txt"
+POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
+POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 
 # Parsing and scraping filters and keywords
 EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']
-URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer']
-EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'násilí', 'fyzick', 'útok', 'anti', 'hate', 'rasis']
+URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer', 'cmaral', ]
+EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis']
 
 # Sitemap constants
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"

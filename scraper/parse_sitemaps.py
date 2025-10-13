@@ -1,13 +1,12 @@
-import asyncio
-import aiohttp
-import aiofiles
-
 import os
 import tempfile
 import json
+import asyncio
+import aiohttp
+import aiofiles
 import xml.etree.ElementTree as ET
-
 from functools import partial
+
 from utils.network_utils import create_session, get_bytes
 from config import (
     SITEMAPS_FP,
@@ -131,12 +130,16 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
 
     # Use a lock for reading and writing
     async with lock:
+        # Probably better to wrap the whole lock in a try block?
         try:
             # Load the json asynchronously with the running loop
             async with aiofiles.open(ARTICLES_FP, 'r') as f:
                 content = await f.read()
                 loop = asyncio.get_running_loop()
                 data = await loop.run_in_executor(None, json.loads,content)
+
+        except (json.JSONDecodeError, FileNotFoundError):
+            print(f"Error, file {ARTICLES_FP} not found")
 
         # Sort the articles
         data[domain] = all_articles
@@ -148,7 +151,7 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
                 json.dump(data, tmp, indent=2)
                 tmp_name = tmp.name
             os.replace(tmp_name, ARTICLES_FP)
-            print(f"✓ {domain} complete: {len(all_articles)} URLs")
+            print(f"{domain} complete: {len(all_articles)} URLs")
         # todo something on error (retry strategy or log)
         except Exception as e:
             print(f"Error saving to {ARTICLES_FP}: {e}")
@@ -157,6 +160,7 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
                 os.unlink(tmp_name)
             raise
     return
+
 
 async def parse_all_sitemaps() -> None:
     # Init concurrency primitives
