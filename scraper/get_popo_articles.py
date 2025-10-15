@@ -1,34 +1,45 @@
 import asyncio
+import logging
 import os
 import tempfile
 import os.path
-
-
-import aiohttp
 import aiofiles
 import json
 
 from bs4 import BeautifulSoup
 
-from config import POLICE_ARTICLES_FP, POLICE_SITES_FP, URL_KEYWORDS
+from config import POLICE_ARTICLES_FP, POLICE_SITES_FP, URL_KEYWORDS, LOG_DIR, ERRORS_LOG_FP
+from utils.logger import LogConfig, init_logging, get_logger, destroy
 from utils.network_utils import create_session, get_bytes
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 
 
-async def get_police_articles(domain, url, session, semaphore, lock):
+config = LogConfig(
+        log_level=logging.DEBUG,
+        log_file_path=LOG_DIR / 'get_popo_articles.log',
+        log_errors_file_path=ERRORS_LOG_FP
+    )
+init_logging(config)
+logger = get_logger('get_popo_articles')
+
+
+async def get_police_articles(url, domain, session, semaphore, lock):
     current_url = url
     articles = []
     all_articles_count = 0
     pages_scraped = 0
+    logger.info(f"Scraping {domain}")
     try:
         while current_url:
-            # print(f"Scraping {domain} with url {current_url}...")
-            main_content = await get_bytes(url=current_url, session=session, semaphore=semaphore)
+            main_content = await get_bytes(url=current_url, session=session, semaphore=semaphore, gov_site=True)
+            if main_content is None:
+                logging.error(f"Couldn't get the main content from {current_url}")
+                return
             main_soup = BeautifulSoup(main_content, 'lxml')
 
             article_list = main_soup.select(POLICE_SELECTOR['listing_selectors']['article_selector'])
             if not article_list:
-                print(f"Failed getting the article list element, check the selector")
+                logger.error(f"Failed getting the article list element, check the selector")
                 return
 
             for article in article_list:
@@ -59,7 +70,7 @@ async def get_police_articles(domain, url, session, semaphore, lock):
                 # Only save the articles that include the keywords
                 if any(keyword in article_link for keyword in URL_KEYWORDS):
                     articles.append(BASE_POLICE_URL + article_link)
-                    print(f"Scraped an article: ${article_link}")
+                    # logger.info(f"Scraped an article: ${article_link}")
 
             next_page = main_soup.select_one(POLICE_SELECTOR['pagination']['next_page'])
             if next_page:
@@ -70,7 +81,8 @@ async def get_police_articles(domain, url, session, semaphore, lock):
                 # print(f"Continuing to the next page in: {domain}")
             else:
                 # Else stop the loop and write the collected articles
-                print(f"No next page found, saving {all_articles_count} articles from {pages_scraped} pages...")
+                logger.info(f"No next page found, saving {len(articles)} articles "
+                            f"from {pages_scraped} pages on domain {domain}...")
                 current_url = None
 
         # Write the results
@@ -83,6 +95,7 @@ async def get_police_articles(domain, url, session, semaphore, lock):
                     data = await loop.run_in_executor(None, json.loads, content)
             # If no file, start with empty object
             except (json.JSONDecodeError, FileNotFoundError):
+                logger.debug("Failed to open POLICE_ARTICLES_FP, creating empty dict...")
                 data = {}
 
             if domain not in data:
@@ -92,31 +105,23 @@ async def get_police_articles(domain, url, session, semaphore, lock):
                 # Extend the list with the articles
                 data[domain].extend(articles)
 
-            # Write atomically
             try:
+                # Write atomically
                 tmp_name = None
                 with tempfile.NamedTemporaryFile('w', delete=False, dir=os.path.dirname(POLICE_ARTICLES_FP)) as tmp:
                     json.dump(data, tmp, indent=4, ensure_ascii=False)
                     tmp_name = tmp.name
                 os.replace(tmp_name, POLICE_ARTICLES_FP)
-                print(f"Success: got {len(data[domain])} for {domain}")
-
-            # Catch random errors
+                logger.info(f"Success: got {len(articles)} for {domain}")
+            # Catch errors for writing the results
             except Exception as r:
-                print(f"ERROR: {r}")
+                logger.critical(f"!!ERROR WRITING RESULTS!!" "\n" f"{r}")
                 if tmp_name and os.path.exists(tmp_name):
                     os.unlink(tmp_name)
 
-    # Catch some errors
-    except aiohttp.ClientConnectionError as e:
-        print(f"Connection error for {current_url}:: {e}")
-    except asyncio.TimeoutError as e:
-        print(f"Timeout for {current_url}:: {e}")
-    except aiohttp.ClientError as e:
-        print(f"HTTPError for {current_url}:: {e}")
+    # Catch any generic error
     except Exception as e:
-        print(f"Error reading {current_url}::")
-        print(e)
+        logger.error(f"Error reading {current_url}:" "\n" f"{e}")
 
 
 async def scraper():
@@ -131,15 +136,18 @@ async def scraper():
 
     async with create_session() as session:
         police_tasks = [
-            get_police_articles(domain, url, session, semaphore, file_lock)
+            get_police_articles(url, domain, session, semaphore, file_lock)
             for domain, urls in archives.items()
             for url in urls
         ]
         await asyncio.gather(*police_tasks, return_exceptions=True)
 
+    logger.info(f"Finished scraping {len(archives)} police archives, exiting....")
+
 
 def main():
     asyncio.run(scraper())
+    destroy()
 
 
 if __name__ == "__main__":

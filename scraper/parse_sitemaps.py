@@ -5,8 +5,10 @@ import asyncio
 import aiohttp
 import aiofiles
 import xml.etree.ElementTree as ET
+import logging
 from functools import partial
 
+from utils.logger import LogConfig, init_logging, get_logger, destroy
 from utils.network_utils import create_session, get_bytes
 from config import (
     SITEMAPS_FP,
@@ -14,9 +16,17 @@ from config import (
     URL_KEYWORDS,
     URL_EL,
     LOC_EL,
-    SITEMAP_INDEX_EL
+    SITEMAP_INDEX_EL, LOG_DIR, ERRORS_LOG_FP,
 )
 
+
+config = LogConfig(
+        log_level=logging.DEBUG,
+        log_file_path=LOG_DIR / 'parse_sitemaps.log',
+        log_errors_file_path=ERRORS_LOG_FP
+    )
+init_logging(config)
+logger = get_logger()
 
 async def parse_xml_tag(content_bytes: bytes, url: str) -> ET.Element | None:
     # Try multiple encodings because the sitemaps are weird
@@ -26,7 +36,7 @@ async def parse_xml_tag(content_bytes: bytes, url: str) -> ET.Element | None:
             decoded_bytes = content_bytes.decode(encoding)
             # Return if no content
             if len(decoded_bytes) <= 10:
-                print(f"No content for {url}, skipping")
+                logger.warning(f"No content for {url}, skipping")
                 return None
 
             # Parse the root asynchronously
@@ -37,16 +47,16 @@ async def parse_xml_tag(content_bytes: bytes, url: str) -> ET.Element | None:
 
         # Catch exceptions
         except UnicodeDecodeError as e:
-            print(f"UnicodeDecodeError with {encoding}: {e}")
+            logger.error(f"UnicodeDecodeError with {encoding}: {e}")
             continue
         except ET.ParseError as e:
-            print(f"ParseError with {encoding}: {e}")
-            print(f"First 500 chars with {encoding}:")
-            print(decoded_bytes[:500] if 'content' in locals() else "Could not decode")
+            logger.error(f"ParseError with {encoding}: {e}")
+            logger.error(f"First 500 chars with {encoding}:")
+            logger.error(decoded_bytes[:500] if 'content' in locals() else "Could not decode")
             continue
 
     # Final fallback return
-    print(f"Could not parse {url} with any encoding")
+    logger.warning(f"Could not parse {url} with any encoding")
     return None
 
 
@@ -81,8 +91,9 @@ def extract_article_urls(root: ET.Element):
                 #     seen_slugs.add(slug)
                 #     urls.append(loc.text)
                 #     print(loc.text)
-                print(loc.text)
                 urls.append(loc.text)
+
+    logger.info(f"Found {len(urls)} urls")
     return urls
 
 
@@ -90,13 +101,13 @@ async def parse_single_map(url: str, session: aiohttp.ClientSession, semaphore: 
     # Get the content
     content_bytes = await get_bytes(url, session, semaphore)
     if content_bytes is None:
-        print(f"No content for {url}")
+        logger.warning(f"No content for {url}")
         return []
 
     # Parse the root tag
     root: ET.Element = await parse_xml_tag(content_bytes, url)
     if root is None:
-        print(f"No root for {url}")
+        logger.warning(f"No root for {url}")
         return []
 
     # Parse the sitemapindex
@@ -110,12 +121,12 @@ async def parse_single_map(url: str, session: aiohttp.ClientSession, semaphore: 
         return article_urls
 
     else:
-        print(f"Unknown root tag: {root.tag}")
+        logger.warning(f"Unknown root tag: {root.tag}")
         return []
 
 
 async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, lock: asyncio.Lock):
-    print(f"Processing {domain}")
+    logger.info(f"Processing {domain}")
     # Create coroutine tasks
     tasks = [parse_single_map(url=sitemap, session=session, semaphore=semaphore) for sitemap in sitemaps]
     # Schedule the tasks and await
@@ -139,7 +150,7 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
                 data = await loop.run_in_executor(None, json.loads,content)
 
         except (json.JSONDecodeError, FileNotFoundError):
-            print(f"Error, file {ARTICLES_FP} not found")
+            logger.error(f"Error, file {ARTICLES_FP} not found")
 
         # Sort the articles
         data[domain] = all_articles
@@ -151,13 +162,12 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
                 json.dump(data, tmp, indent=2)
                 tmp_name = tmp.name
             os.replace(tmp_name, ARTICLES_FP)
-            print(f"{domain} complete: {len(all_articles)} URLs")
+            logger.info(f"{domain} complete: {len(all_articles)} URLs")
         # todo something on error (retry strategy or log)
         except Exception as e:
-            print(f"Error saving to {ARTICLES_FP}: {e}")
+            logger.error(f"Error saving to {ARTICLES_FP}: {e}")
             if tmp_name and os.path.exists(tmp_name):
-                # Clean up temp the file
-                os.unlink(tmp_name)
+                os.unlink(tmp_name) # Clean up temp the file
             raise
     return
 
@@ -172,8 +182,6 @@ async def parse_all_sitemaps() -> None:
         content = await f.read()
         sitemaps_data: dict = json.loads(content)
 
-
-
     # Open the session with the context manager
     async with create_session() as session:
         # Check each domain
@@ -181,12 +189,13 @@ async def parse_all_sitemaps() -> None:
             process_domain(domain, sitemaps, session, semaphore, file_lock)
             for domain, sitemaps in sitemaps_data.items()
         ]
-        print(f"Processing {len(domain_tasks)} domains in parallel...")
+        logger.info(f"Processing {len(domain_tasks)} domains in parallel...")
         await asyncio.gather(*domain_tasks, return_exceptions=True)
 
 
 def main():
     asyncio.run(parse_all_sitemaps())
+    destroy() # Kill the log handlers
 
 
 if __name__ == "__main__":

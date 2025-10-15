@@ -6,19 +6,21 @@ from logging.handlers import RotatingFileHandler
 from io import TextIOWrapper
 
 
+# For one app with multiple components
 class BaseLogModule(Enum):
     pass
 
 
+# Config object/dataclass
 class LogConfig:
     def __init__(
             self,
-            log_module_cls: type[BaseLogModule] | None = None,
+            log_module_cls: type[BaseLogModule] | str | None = None,
             log_level: int = logging.INFO,
             log_std_stream: TextIOWrapper | None = sys.stdout,
             log_file_path: str | None = None,
             log_errors_file_path: str | None = None,
-            log_file_max_size: int = 1 * 1024 * 2,
+            log_file_max_size: int = 1 * 1024 ** 2,
             log_file_backup_count: int = 10,
             log_format: str = (
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -57,13 +59,19 @@ def init_logging(config: LogConfig):
             pass
 
 
-def get_logger(module: BaseLogModule = None, log_level=None) -> logging.Logger:
+def get_logger(module: BaseLogModule | str= None, log_level=None) -> logging.Logger:
     global log_config
 
     if log_level is None:
         log_level = log_config.log_level
 
-    name = module.value if module else None
+    # Handle both enum and string
+    if isinstance(module, str):
+        name = module
+    elif module:
+        name = module.value
+    else:
+        name = None
 
     # If the module logger exists, use it
     if name in loggers.keys():
@@ -102,7 +110,7 @@ def get_logger(module: BaseLogModule = None, log_level=None) -> logging.Logger:
                     log_config.log_file_backup_count,
                     'utf-8',
                 )
-                errors_handler.setLevel(logging.WARNING)
+                errors_handler.setLevel(logging.ERROR)
                 module_handler.setLevel(log_level)
 
                 lh.extend([module_handler, errors_handler])
@@ -126,8 +134,7 @@ def get_logger(module: BaseLogModule = None, log_level=None) -> logging.Logger:
         log.debug(f'Logging initialized (name={name})')
         return log
 
+
 def destroy():
     for handler in log_handlers:
         handler.close()
-
-

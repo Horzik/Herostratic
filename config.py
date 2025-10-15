@@ -5,15 +5,21 @@ ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 OUTPUT_DIR = DATA_DIR / "output"
 INPUT_DIR = DATA_DIR / "input"
+LOG_DIR = DATA_DIR / "logs"
 
-# Create the "output" dir if it doesn't exist
+# Create the "output" and "logs" dirs if they don't exist
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-# Input
+
+# Scrape Input
 SITES_FP = INPUT_DIR / "sites.txt"
 POLICE_SITES_FP = INPUT_DIR / "police_sites.txt"
 
-# Output
+# Logs FPs
+ERRORS_LOG_FP = LOG_DIR / "errors.log"
+
+# Scrape Output
 SITEMAPS_FP = OUTPUT_DIR / "sitemaps.json"
 NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
 ARTICLES_FP = OUTPUT_DIR / "articles.json"
@@ -37,3 +43,4 @@ SITEMAP_INDEX_EL = f".//{SITEMAP_NS}loc"
 # Various constants
 MAX_RETRIES = 3
 TIMEOUT = 10
+POPO_TIMEOUT = 30

@@ -1,8 +1,20 @@
 import json
-from config import SITES_FP, SITEMAPS_FP, NOSITEMAPS_FP
+import logging
+
+from config import SITES_FP, SITEMAPS_FP, NOSITEMAPS_FP, LOG_DIR, ERRORS_LOG_FP
 from urllib.robotparser import RobotFileParser
 
-# Check if a target page has a sitemap, save it and write the resto to "NOSITEMAPS"
+from utils.logger import LogConfig, init_logging, get_logger, destroy
+
+config = LogConfig(
+        log_level=logging.DEBUG,
+        log_file_path=LOG_DIR / 'get_popo_articles.log',
+        log_errors_file_path=ERRORS_LOG_FP
+    )
+init_logging(config)
+logger = get_logger()
+
+# Check if a target sites have a sitemap/index => save and write to "SITEMAPS" and rest to "NOSITEMAPS"
 def main():
     results = {}
     # Read and clean the urls
@@ -15,27 +27,33 @@ def main():
             # Init, prepare, and run the RP
             rp = RobotFileParser()
             rp.set_url(robots_txt)
+
             try:
                 rp.read()
             except Exception as e:
-                print(f"Error reading {url}::")
-                print(e)
+                logger.error(f"Error reading {url}::")
+                logger.error(e)
                 n.write(url + "\n")
                 continue
+
             sitemap: list[str] | None = rp.site_maps()
             # No sitemaps ==> add to the NOSITEMAPS
             if sitemap is None:
-                print (url + " has no sitemap")
+                logger.info(url + " has no sitemap")
                 n.write(url + "\n")
                 continue
             # Sitemap ==> add to results
             results[url] = sitemap
-            print(sitemap)
+            logger.info(f"Found a sitemap:'{sitemap}' for url: '{url}'")
 
     ## Write the results to SITEMAPS
     if results:
         with open(SITEMAPS_FP, "w") as m:
             json.dump(results, m, indent=2)
+            logger.info(f"Found {len(results)} sitemaps, exiting...")
+
+    destroy() # Kill the log handlers
+
 
 if __name__ == "__main__":
     main()
