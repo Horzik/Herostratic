@@ -1,76 +1,88 @@
+import random
+
 import aiohttp
 import asyncio
+
 from config import MAX_RETRIES, POPO_TIMEOUT, TIMEOUT
 from utils.logger import get_logger
 
 
+# Returns a new ClientSession with default config
 def create_session():
-    # Configure HTTP session with connection pooling
     connector = aiohttp.TCPConnector(
         limit=100,
         limit_per_host=30,
         ttl_dns_cache=500
     )
-
     return aiohttp.ClientSession(
         connector=connector,
-        # Play nice, add the headers
         headers={
+            # Play nice, add the headers
             'User-Agent': 'SitemapParser/1.0 (learning project)',
             'Accept': 'application/xml, text/xml, text/html, */*',
         }
     )
 
 
+# Function to fetch target url and return its bytes
 async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False) -> bytes | None:
     logger = get_logger('network')
+    # gov_site ==> longer retry timeout
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:
         for attempt in range(MAX_RETRIES):
             # Incrementally increase the wait time
-            wait_time = 2 ** attempt
+            wait_time = 3 ** attempt
             try:
                 # Make the http request
                 async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
 
                     if response.status == 200:
-                        # print(f"Success for {url}, attempt {attempt + 1}")
+                        # Success, don't log anything, let the caller deal with it
                         content_bytes = await response.read()
                         return content_bytes
+
+                    # "Too many requests" ==> wait extra long
                     elif response.status == 429:
                         logger.warning(f"429 for '{url}', attempt {attempt + 1}, waiting extra long")
                         if attempt < MAX_RETRIES - 1:
-                            await asyncio.sleep(wait_time + 10)
+                            jitter = random.uniform(0, wait_time)  # Add randomness
+                            await asyncio.sleep(wait_time + 10 + jitter)
                             continue
                         else:
                             logger.error(f"Failed fetching '{url}' with {response.status}, all tries exhausted")
                             return None
-                    elif response.status in [500, 502, 503, 504]:  # Retry-able errors
+
+                    # Retry-able errors
+                    elif response.status in [500, 502, 503, 504]:
                         logger.warning(f"HTTP {response.status} for '{url}', attempt {attempt + 1}/{MAX_RETRIES}")
                         if attempt < MAX_RETRIES - 1:
-                            await asyncio.sleep(wait_time)
+                            jitter = random.uniform(0, wait_time)  # Add randomness
+                            await asyncio.sleep(wait_time + jitter)
                             continue
                         else:
                             logger.error(f"Failed fetching '{url}' with {response.status}, all tries exhausted")
                             return None
+
                     else:  # 404, 403, 400, etc - don't retry
                         logger.error(f"HTTP {response.status} for '{url}', not retrying")
                         return None
 
             # Catch exceptions
-            # todo create an error log (and other logs)
             except aiohttp.ClientConnectionError as e:
                 logger.warning(f"Connection error for '{url}', (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
             except asyncio.TimeoutError as e:
                 logger.warning(f"Timeout for '{url}', (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
             except aiohttp.ClientError as e:
                 logger.warning(f"HTTPError for '{url}', (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
-            # Retry
+            # Retry after exception, add a jitter
             if attempt < MAX_RETRIES - 1:
-                logger.warning(f"Retrying...")
-                await asyncio.sleep(wait_time)
+                jitter = random.uniform(0, wait_time)  # Add randomness
+                logger.warning(f"Retrying after {wait_time + jitter:.1f}s...")
+                await asyncio.sleep(wait_time + jitter)
             else:
                 logger.error(f"Failed parsing '{url}', all tries exhausted")
                 return None
-        # Return so that linter stays happy :))
+
+        # Return so the linter stays happy :))
         return None

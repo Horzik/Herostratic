@@ -5,8 +5,10 @@
 from config import POLICE_ARCHIVES_FP
 
 BASE_POLICE_URL = "https://policie.gov.cz/"
+BASE_DENIK_URL_END = "denik.cz/"
 
 ARCHIVE_SITE_CONFIGS = {
+    # todo this is *bit* confusing, probably should refactor
     BASE_POLICE_URL: {
         'listing_selectors':{
             # Mostly redundant, we are just getting the URLs
@@ -17,6 +19,7 @@ ARCHIVE_SITE_CONFIGS = {
             'article_description': 'div.infobox > p',
             'author': 'p.authorDate',
             'date': 'p.authorDate',
+            'last_page': 'span.stranky a:not(.next)'
         },
         'article_selectors': {
             'title': 'div#content > h1',
@@ -27,6 +30,7 @@ ARCHIVE_SITE_CONFIGS = {
             'document_links': 'div.related a.dark',
         },
         'archive_selectors': {
+            'year_links': 'div#content ul li a',
             'municipality': 'div#subHPtitle img',  # Use this and THEN "municipality = element['alt']"
             'archive_link': 'a[href*="archiv"]',
             'news_link': 'ul.dots a[href*="zpravodaj"]',

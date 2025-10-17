@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import random
+from urllib.parse import urljoin
+
 import aiofiles
 import aiohttp
 from typing import Tuple
@@ -15,24 +17,16 @@ from scraper.site_configs import POLICE_ARCHIVE_SELECTORS, BASE_POLICE_URL
 
 config = LogConfig(
         log_level=logging.DEBUG,
-        log_file_path=LOG_DIR / 'get_popo_articles.log',
+        log_file_path=LOG_DIR / 'get_popo_archives.log',
         log_errors_file_path=ERRORS_LOG_FP
     )
 init_logging(config)
-logger = get_logger()
-
-def load_target_sites() -> list:
-    with open(POLICE_SITES_FP, "r") as p:
-        sites = []
-        for line in p:
-            line = line.strip().strip("',")
-            if line:
-                sites.append(line)
-    return sites
+logger = get_logger('get_popo_archives')
 
 
-# Check if a target page has a sitemap, save it and write the resto to "NOSITEMAPS"
-async def get_police_archives(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Tuple[str, str] | None:
+# Returns the link to an archive of the target police site
+# todo returns 2 wrong links lol, investigate
+async def get_police_archive(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Tuple[str, str] | None:
     await asyncio.sleep(random.uniform(2, 5))
     try:
         main_content_bytes = await get_bytes(url, session, semaphore, gov_site=True)
@@ -49,33 +43,39 @@ async def get_police_archives(url: str, session: aiohttp.ClientSession, semaphor
         # If we get archive link => win, return
         archive_element = main_soup.select_one(POLICE_ARCHIVE_SELECTORS['archive_link'])
         if archive_element:
-            logger.info(f"Getting ref: {archive_element.get('href')}")
-            archive_link = BASE_POLICE_URL + archive_element.get('href').lstrip('/')
+            logger.debug(f"Getting ref: {archive_element.get('href')}")
+            archive_link = urljoin(BASE_POLICE_URL, archive_element.get('href'))
             if archive_link:
-                logger.info(f"Got a direct link for {url}")
+                logger.info(f"Returning:: '{archive_link}' for url:: '{url}'")
                 return municipality, archive_link
 
         # Else it's harder, go to the "zpravodajstvi" link
         zpr_ref = main_soup.select_one(POLICE_ARCHIVE_SELECTORS['news_link'])
         if zpr_ref:
-            logger.info(f"Getting zprv ref: {zpr_ref.get('href')}")
-            zpr_link = BASE_POLICE_URL + zpr_ref.get('href').lstrip('/')
+            logger.debug(f"Getting zprv ref: {zpr_ref.get('href')}")
+            zpr_link = urljoin(BASE_POLICE_URL, zpr_ref.get('href').lstrip('/'))
             zpravodajstvi_bytes = await get_bytes(zpr_link, session, semaphore)
             second_soup = BeautifulSoup(zpravodajstvi_bytes, 'lxml')
 
             # Check if the archive is already in here
             year_links = second_soup.select('a[href*="2024"], a[href*="2023"], a[href*="2022"]')
-            if year_links:
-                logger.info(f"Got a nested link for {url}")
+            if len(year_links) == 3:
+                logger.info(f"Returning:: '{zpr_link}' for url:: '{url}'")
                 return municipality, zpr_link
+
+            elif len(year_links) == 1:
+                # logger.info(f"The year_links ref is:: {year_links}....")
+                archive_link = urljoin(BASE_POLICE_URL, year_links[0].get('href'))
+                logger.info(f"Returning:: {archive_link} for url:: '{url}'")
+                return municipality, archive_link
 
             # Else, try finding the archive link here
             else:
                 second_archive_element = second_soup.select_one(POLICE_ARCHIVE_SELECTORS['content_archiv'])
-                logger.info(f"Getting second arch ref: {second_archive_element.get('href')}")
-                second_archive_link = BASE_POLICE_URL + second_archive_element.get('href').lstrip('/')
+                logger.debug(f"Getting second arch ref: {second_archive_element.get('href')}")
+                second_archive_link = urljoin(BASE_POLICE_URL, second_archive_element.get('href').lstrip('/'))
                 if second_archive_link:
-                    logger.info(f"Got a double nested link for {url}")
+                    logger.info(f"Returning:: '{second_archive_link}' for url:: '{url}'")
                     return municipality, second_archive_link
 
     except Exception as e:
@@ -89,15 +89,18 @@ async def get_police_archives(url: str, session: aiohttp.ClientSession, semaphor
 
 async def scraper():
     # Load the police sites
-    sites = load_target_sites()
+    with open(POLICE_SITES_FP, "r") as s:
+        lines = s.readlines()
+        sites = []
+        for line in lines:
+            sites.append(line.strip())
 
     # Open the session with the context manager
     semaphore = asyncio.Semaphore(3)
     async with create_session() as session:
-
         # Get the tasks and await for results
         archive_tasks = [
-            get_police_archives(url, session, semaphore)
+            get_police_archive(url, session, semaphore)
             for url in sites
         ]
         results = await asyncio.gather(*archive_tasks, return_exceptions=True)
@@ -128,6 +131,7 @@ def main():
         asyncio.run(scraper())
     finally:
         destroy() # Kill the log handlers
+
 
 if __name__ == "__main__":
     main()

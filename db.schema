@@ -1,0 +1,21 @@
+{
+    "id": "auto-increment",
+    "url": "unique",
+    "title": "text",
+    "content": "text",
+    "date": "date",
+    "scraped_at": "timestamp",
+    "last_updated": "timestamp nullable",
+    "source_domain": "text",
+    "location": "text",
+    "crime_type": "text",
+    "keywords": "text[] or json",  # Array of tags
+    "author": "text nullable",
+    "contact_info": "text nullable",
+    "thumbnail_path": "text nullable",
+    "image_paths": "text[] or json",  # Array of image paths
+    "video_paths": "text[] or json",  # Array of video paths
+    "file_paths": "text[] or json",  # PDFs, other files
+    "external_links": "text[] or json nullable",
+    "raw_html": "text"  # For re-parsing
+}

@@ -11,13 +11,12 @@ LOG_DIR = DATA_DIR / "logs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+# Logs FPs
+ERRORS_LOG_FP = LOG_DIR / "errors.log"
 
 # Scrape Input
 SITES_FP = INPUT_DIR / "sites.txt"
 POLICE_SITES_FP = INPUT_DIR / "police_sites.txt"
-
-# Logs FPs
-ERRORS_LOG_FP = LOG_DIR / "errors.log"
 
 # Scrape Output
 SITEMAPS_FP = OUTPUT_DIR / "sitemaps.json"
@@ -43,4 +42,4 @@ SITEMAP_INDEX_EL = f".//{SITEMAP_NS}loc"
 # Various constants
 MAX_RETRIES = 3
 TIMEOUT = 10
-POPO_TIMEOUT = 30
+POPO_TIMEOUT = 40
