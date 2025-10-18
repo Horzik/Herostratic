@@ -17,18 +17,20 @@ class LogConfig:
             self,
             log_module_cls: type[BaseLogModule] | str | None = None,
             log_level: int = logging.INFO,
+            log_std_level: int = logging.INFO,
             log_std_stream: TextIOWrapper | None = sys.stdout,
             log_file_path: str | None = None,
             log_errors_file_path: str | None = None,
             log_file_max_size: int = 1 * 1024 ** 2,
             log_file_backup_count: int = 10,
             log_format: str = (
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
             ),
     ):
         self.log_module_cls = log_module_cls
         self.log_level = log_level
         self.log_std_stream = log_std_stream
+        self.log_std_level = log_std_level
         self.log_file_path = log_file_path
         self.log_errors_file_path = log_errors_file_path
         self.log_file_max_size = log_file_max_size
@@ -38,7 +40,7 @@ class LogConfig:
 
 loggers = {} # All loggers
 log_handlers = [] # All handlers
-log_config: LogConfig | None = LogConfig(BaseLogModule) # Default config
+log_config: LogConfig | None = LogConfig(BaseLogModule)
 
 
 def init_logging(config: LogConfig):
@@ -59,11 +61,13 @@ def init_logging(config: LogConfig):
             pass
 
 
-def get_logger(module: BaseLogModule | str= None, log_level=None) -> logging.Logger:
+def get_logger(module: BaseLogModule | str= None, log_level=None, std_log_level=None) -> logging.Logger:
     global log_config
 
     if log_level is None:
         log_level = log_config.log_level
+    if std_log_level is None:
+        std_log_level = log_config.log_std_level
 
     # Handle both enum and string
     if isinstance(module, str):
@@ -88,7 +92,7 @@ def get_logger(module: BaseLogModule | str= None, log_level=None) -> logging.Log
         # Console handler
         if log_config.log_std_stream:
             handler = logging.StreamHandler(log_config.log_std_stream)
-            handler.setLevel(log_level)
+            handler.setLevel(std_log_level)
             lh.append(handler)
             log_handlers.append(handler)
 

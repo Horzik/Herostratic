@@ -26,11 +26,13 @@ HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
+POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
 
 # Parsing and scraping filters and keywords
 EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']
 URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer', 'cmaral', ]
 EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis']
+ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
 
 # Sitemap constants
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
@@ -43,3 +45,18 @@ SITEMAP_INDEX_EL = f".//{SITEMAP_NS}loc"
 MAX_RETRIES = 3
 TIMEOUT = 10
 POPO_TIMEOUT = 40
+
+CZECH_MONTHS = [
+        'ledna', 'února', 'března', 'dubna', 'května', 'června',
+        'července', 'srpna', 'září', 'října', 'listopadu', 'prosince',
+        'leden','únor','březen','duben','květen','červen',
+        'červenec', 'srpen', 'září',  'říjen', 'listopad', 'prosinec'
+]
+
+PIG_RANKS = ['nprap.', 'plk.', 'por.', 'prap.', 'kpt.', 'mjr.', 'pprap.', 'npor.']
+
+# Regex for getting the date from article content
+months_pattern = '|'.join(CZECH_MONTHS)
+date_regex_words = rf'\d{{1,2}}\.?\s*({months_pattern})\s*\d{{4}}'
+date_regex_numbers = r'\d{1,2}\.\s*\d{1,2}\.\s*\d{4}'
+DATE_REGEX = rf'({date_regex_words}|{date_regex_numbers})'

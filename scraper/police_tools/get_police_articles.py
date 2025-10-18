@@ -1,31 +1,32 @@
-import asyncio
-import logging
-import os
-import tempfile
-import os.path
-import time
-from datetime import timedelta
-
-import aiofiles
-import json
-
-from bs4 import BeautifulSoup
-
 from config import POLICE_ARTICLES_FP, URL_KEYWORDS, LOG_DIR, ERRORS_LOG_FP, POLICE_ARCHIVES_FP
 from utils.logger import LogConfig, init_logging, get_logger, destroy
 from utils.network_utils import create_session, get_bytes
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
+from datetime import timedelta
+from bs4 import BeautifulSoup
+import asyncio
+import aiofiles
+import logging
+import tempfile
+import os.path
+import json
+import time
+import os
+import re
 
 
 logConfig = LogConfig(
-        log_level=logging.INFO,
+        log_level=logging.DEBUG,
+        log_std_level=logging.INFO,
         log_file_path=LOG_DIR / 'get_popo_articles.log',
-        log_errors_file_path=ERRORS_LOG_FP)
+        log_errors_file_path=ERRORS_LOG_FP
+)
 init_logging(logConfig)
 logger = get_logger('get_popo_articles')
 
 
 async def get_police_articles(url, year, domain, session, semaphore, lock) -> (int, int, int) or None:
+    """ Finds and writes the archive link for the target domain """
     current_url = url
     articles = []
     all_articles_count = 0
@@ -83,7 +84,7 @@ async def get_police_articles(url, year, domain, session, semaphore, lock) -> (i
                     data = await loop.run_in_executor(None, json.loads, content)
             # If no file, start with empty object
             except (json.JSONDecodeError, FileNotFoundError):
-                logger.debug("Failed to open POLICE_ARTICLES_FP, creating empty dict...")
+                logger.info("Failed to open POLICE_ARTICLES_FP, creating empty dict...")
                 data = {}
 
             if domain not in data:
@@ -96,18 +97,17 @@ async def get_police_articles(url, year, domain, session, semaphore, lock) -> (i
             new_urls = [url for url in articles if url not in existing_urls]  # Only new ones
             data[domain][year].extend(new_urls)
 
-            # Write atomically
             try:
+                # Write the results atomically
                 tmp_name = None
                 with tempfile.NamedTemporaryFile('w', delete=False, dir=os.path.dirname(POLICE_ARTICLES_FP)) as tmp:
                     json.dump(data, tmp, indent=4, ensure_ascii=False)
                     tmp_name = tmp.name
                 os.replace(tmp_name, POLICE_ARTICLES_FP)
                 logger.info(f"Success: got {len(articles)} for {domain} in year {year}")
-
-            # Catch errors for writing the results
             except Exception as r:
-                logger.critical(f"!!ERROR WRITING RESULTS!!")
+                # Catch errors for writing the results
+                logger.critical(f"!!CRITICAL ERROR WRITING RESULTS!!")
                 logger.critical(f"ERROR: {r}")
                 if tmp_name and os.path.exists(tmp_name):
                     os.unlink(tmp_name)
@@ -116,13 +116,13 @@ async def get_police_articles(url, year, domain, session, semaphore, lock) -> (i
 
     # Catch any generic error
     except Exception as e:
-        logger.error(f"Error reading '{current_url}', domain: '{domain}' year: '{year}'. Error ===>")
+        logger.error(f" {domain}/{year} FAILED for '{current_url}'...Error ===>")
         logger.error(e)
     return None
 
 
-# Returns all years and their article listings links for the target domain (ie from the link)
 async def parse_archive(url, domain, session, semaphore) -> tuple[str, dict[int, str]] | None:
+    """ Returns all years and their article listings links for the target domain (ie from the url) """
     try:
         page_bytes = await get_bytes(url=url, session=session, semaphore=semaphore, gov_site=True)
         if page_bytes is None:
@@ -131,16 +131,17 @@ async def parse_archive(url, domain, session, semaphore) -> tuple[str, dict[int,
 
         main_soup = BeautifulSoup(page_bytes, 'lxml')
 
-        # Check all possible locations of the year links
-        # todo could be a lot nicer
+        # Special hack for the two problem sites (iykyk)
         if 'Vysočina' in domain or 'Zlk' in domain or 'Zlínsk' in domain:
-            # Special hack for the two problem sites (iykyk)
             content_ref = main_soup.select('table tr td a')
             logger.debug(f"Using special table selector for {domain}, found {len(content_ref)} links")
         else:
+            # Check all possible selectors of the year links
             content_ref = main_soup.select(POLICE_SELECTOR['archive_selectors']['year_links'])
             if not content_ref:
+                # The order can matter
                 logger.warning(f"No primary selector, trying table...")
+                # todo write these three as one group and cycle through them
                 content_ref = main_soup.select('table td a')
                 if not content_ref:
                     logger.warning(f"No table, trying p tags...")
@@ -153,8 +154,6 @@ async def parse_archive(url, domain, session, semaphore) -> tuple[str, dict[int,
                             return None
 
         logger.debug(f"Parsing {domain} for year links...")
-
-        # Aggregate the years and their links
         all_years: dict[int, str] = {}
         for year_element in content_ref:
             year_ref = year_element.get('href')
@@ -165,7 +164,6 @@ async def parse_archive(url, domain, session, semaphore) -> tuple[str, dict[int,
                 continue
             year_text = year_element.get_text(strip=True)
             try:
-                import re
                 # Get only the year from year_text
                 match = re.search(r'\b(20\d{2})\b', year_text)
                 if not match:
@@ -174,13 +172,12 @@ async def parse_archive(url, domain, session, semaphore) -> tuple[str, dict[int,
                 all_years[year] = year_link
             except ValueError:
                 logger.error(f"Failed to parse year '{year_text}' ...")
-
-        # Return all years for the domain
         if (len(all_years)) == 0:
-            logger.error(f"Couldn't find any year links in '{domain}'...")
+            logger.error(f"Couldn't find any year links in: '{domain}'...")
             logger.error(f"The content element::: {content_ref}")
             return None
 
+        # Return all years for the domain
         logger.info(f"Found {len(all_years)} years in '{url}'")
         return domain, all_years
 
@@ -191,31 +188,30 @@ async def parse_archive(url, domain, session, semaphore) -> tuple[str, dict[int,
 
 async def scraper():
     # Load the archive sites
-    with open(POLICE_ARCHIVES_FP, "r") as r:
-        content = r.read()
-        archives: dict = json.loads(content)
+    with open(POLICE_ARCHIVES_FP, "r") as a:
+        archives: dict = json.load(a)
 
-    # Init the async primitives and open the session
+    # Init async and open the session
     timer_start = time.time()
     semaphore = asyncio.Semaphore(30)
     file_lock = asyncio.Lock()
     async with create_session() as session:
 
-        # Create list of tuples: (domain, year, coroutine)
-        archive_tasks = [
+        # List of (domain, coroutine)
+        archive_jobs = [
             (domain, parse_archive(url, domain, session, semaphore))
             for domain, urls in archives.items()
             for url in urls
         ]
-        # Omit the domain from results and run each archive parse
-        archive_results = await asyncio.gather(*[task for _, task in archive_tasks],
+        # Gather the coroutines and await
+        archive_results = await asyncio.gather(*[coro for _, coro in archive_jobs],
             return_exceptions=True
         )
 
         # Get the domains from tasks, check and process each result
         sites = {}
         failed_archives = 0
-        for (domain, _), arch_result in zip(archive_tasks, archive_results):
+        for (domain, _), arch_result in zip(archive_jobs, archive_results):
             # Check errors
             if isinstance(arch_result, Exception):
                 logger.error(f"Error for archive task for domain: '{domain}'...")
@@ -231,20 +227,22 @@ async def scraper():
                 sites[domain] = {}
             sites[domain].update(year_links)
 
-        # Scrape all years of all archives
-        police_tasks = [
-            get_police_articles(url, year, domain, session, semaphore, file_lock)
+
+        # List of ((domain, year), coroutine)
+        article_jobs = [
+            ((domain, year), get_police_articles(url, year, domain, session, semaphore, file_lock))
             for domain, years in sites.items()
             for year, url in years.items()
         ]
+        # Run the articles jobs and check result
+        logger.info(f"Scraping {len(article_jobs)} tasks from {len(archives) - failed_archives}/{len(archives)} archives...")
+        article_results = await asyncio.gather(*article_jobs, return_exceptions=True)
+
+        # Aggregate the result stats by checking each of them
         saved_articles = 0
         failed_articles = 0
         articles_processed = 0
         total_pages = 0
-
-        # Run the articles tasks and check result
-        logger.info(f"Scraping {len(police_tasks)} tasks from {len(archives) - failed_archives}/{len(archives)} archives...")
-        article_results = await asyncio.gather(*police_tasks, return_exceptions=True)
         for i, result in enumerate(article_results):
             if isinstance(result, Exception):
                 logger.error(f"Police scraping task {i} failed with exception: {result}")

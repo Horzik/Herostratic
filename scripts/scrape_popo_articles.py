@@ -46,7 +46,7 @@ async def parse_urls(urls_list: list[str]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Scrape popo articles')
+    parser = argparse.ArgumentParser(description='Scrape police_tools articles')
     parser.add_argument('urls_file', help='Scrape articles from list of police urls')
     args = parser.parse_args()
 

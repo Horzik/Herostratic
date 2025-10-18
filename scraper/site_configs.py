@@ -24,10 +24,13 @@ ARCHIVE_SITE_CONFIGS = {
         'article_selectors': {
             'title': 'div#content > h1',
             'content': 'div#content',
-            'description': 'div#content p:first-of-type',
+            'description': 'div#content > p:first-of-type',
             'image': 'div#content img',
-            'has_documents': 'div.related',
+            'documents': 'div.related',
             'document_links': 'div.related a.dark',
+            'pictures': 'div.graybox, div#graybox, div.in',
+            'breadcrumbs': 'p.breadcrumbs',
+            'drobek': 'div#siteNavigation'
         },
         'archive_selectors': {
             'year_links': 'div#content ul li a',
