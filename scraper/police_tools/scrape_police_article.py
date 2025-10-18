@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, CZECH_MONTHS, PIG_RANKS, DATE_REGEX, \
     URL_KEYWORDS, ARTICLE_KEYWORDS
 from scraper.site_configs import POLICE_SELECTOR
+from utils.io_utils import async_json_read, atomic_json_write
 from utils.logger import LogConfig, init_logging, get_logger, destroy
 from utils.network_utils import get_bytes, create_session
 
@@ -37,7 +38,6 @@ async def scrape_article(url, domain, year, session, semaphore, file_lock):
         if page_bytes is None:
             logger.error(f"Failed scraping '{url}' from '{domain}'::'{year}")
             return None
-
 
         soup = BeautifulSoup(page_bytes, 'lxml')
         # Prepare the elements
@@ -137,59 +137,41 @@ async def scrape_article(url, domain, year, session, semaphore, file_lock):
                 next_element = domain_ref.find_next_sibling('a')
                 domain = next_element.get_text()
 
-
+        # Add 'id' (probably added in the DB automatically? Or huh)
         result['title'] = title_ref[0].get_text()
         result['url'] = url
+        # Add 'scraped_at' right here
         result['year'] = year
+        result['date'] = date_text
         result['municipality'] = domain
         result['keywords'] = keywords
-        result['date'] = date_text
         result['author'] = author_text
         result['description'] = description_ref[0].get_text().strip()
         result['content'] = content_text
+        # Get and add thumbnails?
+        # Probably change the below to direct FPs and deduce the boolean in DB
         result['has_pictures'] = has_pictures
         result['has_documents'] = has_documents
 
 
         async with file_lock:
-            try:
-                # Read the existing results
-                async with aiofiles.open(POLICE_RESULTS_FP, 'r', encoding='utf-8') as a:
-                    content = await a.read()
-                    loop = asyncio.get_event_loop()
-                    data = await loop.run_in_executor(None, json.loads, content)
-            # If no file, start with empty object
-            except (json.JSONDecodeError, FileNotFoundError):
-                logger.info("Failed to open POLICE_ARTICLES_FP, creating empty dict...")
-                data = {}
+            # Read the existing results
+            data = await async_json_read(POLICE_RESULTS_FP)
 
             if domain not in data:
                 data[domain] = {}
             if year not in data[domain]:
                 data[domain][year] = []
-
             data[domain][year].append(result)
 
-            try:
-                # Write the results atomically
-                tmp_name = None
-                with tempfile.NamedTemporaryFile('w', delete=False, dir=os.path.dirname(POLICE_RESULTS_FP)) as tmp:
-                    json.dump(data, tmp, indent=4, ensure_ascii=False)
-                    tmp_name = tmp.name
-                os.replace(tmp_name, POLICE_RESULTS_FP)
-                logger.info(f"Success: saved an article for {domain} in year {year}")
-            except Exception as r:
-                # Catch errors for writing the results
-                logger.critical(f"!!CRITICAL ERROR WRITING RESULTS!!")
-                logger.critical(f"ERROR: {r}")
-                if tmp_name and os.path.exists(tmp_name):
-                    os.unlink(tmp_name)
+            # Write the results
+            atomic_json_write(data, POLICE_RESULTS_FP)
 
         return result
 
     except Exception as e:
-        logger.error(f"Failed scraping '{url}' from '{domain}'::'{year}. Error message ==>")
-        logger.error(e)
+        logger.exception(f"Failed scraping '{url}' from '{domain}'::'{year}. Error message ==>")
+        logger.exception(e)
         return None
 
 

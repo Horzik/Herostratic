@@ -52,5 +52,11 @@ ARCHIVE_SITE_CONFIGS = {
     }
 }
 
+CONTENT_SELECTORS = [
+            'table td a',
+            '#content p a',
+            'ul li a',
+        ]
+
 POLICE_SELECTOR = ARCHIVE_SITE_CONFIGS[BASE_POLICE_URL]
 POLICE_ARCHIVE_SELECTORS = ARCHIVE_SITE_CONFIGS[BASE_POLICE_URL]['archive_selectors']

@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from config import LOG_DIR, ERRORS_LOG_FP
-from scraper.popo.get_police_articles import get_police_articles
+from scraper.police_tools.get_police_articles import get_police_articles
 from utils.logger import init_logging, get_logger, LogConfig
 from utils.network_utils import create_session
 
@@ -19,10 +19,6 @@ logger = get_logger('scrape_urls')
 async def parse_urls(urls_list: list[str]):
     semaphore = asyncio.Semaphore(10)
     file_lock = asyncio.Lock()
-    for url in urls_list:
-
-        pass
-
 
     async with create_session() as session:
         ulr_tasks = [
@@ -56,9 +52,9 @@ def main():
             asyncio.run(parse_urls(urls_list))
 
     except FileNotFoundError:
-        logger.error(f"File not found: {args.urls_file}")
+        logger.exception(f"File not found: {args.urls_file}")
     except Exception as e:
-        logger.error(f"Error reading file: {e}")
+        logger.exception(f"Error reading file: {e}")
 
 
 if __name__ == '__main__':
