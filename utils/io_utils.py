@@ -21,6 +21,7 @@ logger = get_logger('io_utils')
 
 
 class CriticalDataError(Exception):
+    """ We failed at the same time as the only time we write? """
     pass
 
 

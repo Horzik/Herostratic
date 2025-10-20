@@ -25,7 +25,7 @@ logger = get_logger('get_popo_archives')
 
 
 # Returns the link to an archive of the target police site
-# todo returns 2 wrong links lol, investigate
+# TODO! FIX, returns 2 wrong links year links lol ALSO we need to return the NON-YEAR links !
 async def get_police_archive(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Tuple[str, str] | None:
     await asyncio.sleep(random.uniform(2, 5))
     try:

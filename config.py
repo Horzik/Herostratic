@@ -27,6 +27,7 @@ DEDUPED_FP = OUTPUT_DIR / "deduped.json"
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
+YEAR_LINKS_FP = OUTPUT_DIR / "year_links.json"
 
 # Parsing and scraping filters and keywords
 EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']
