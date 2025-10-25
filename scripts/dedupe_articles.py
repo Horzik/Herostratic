@@ -2,7 +2,7 @@ from config import ARTICLES_FP
 import json
 
 
-# Attempt to get rid of duplicate items from a target dictionary (ie "ARTICLES_FP")
+# Log the difference in deduplication
 def dedupe_articles():
     with open(ARTICLES_FP, "r") as f:
         data = json.load(f)

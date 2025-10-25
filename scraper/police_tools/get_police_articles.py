@@ -130,7 +130,7 @@ def parse_articles_listing(
 ) -> tuple[ArticleParseMetadata, str | None] | None:
     """ Parse the html content of the current articles listing page """
 
-    # Get the list of articles
+    # Unpack the stuff
     articles, all_articles_count, pages_scraped, max_pages = metadata
     main_soup = BeautifulSoup(page_bytes, 'lxml')
     article_list = main_soup.select(POLICE_SELECTOR['listing_selectors']['article_selector'])
@@ -215,24 +215,24 @@ async def scrape_listings(
 
 
 async def scraper(fp: str = POLICE_ARCHIVES_FP):
-    """Main orchestrator, runs archive jobs (to get year links of archives), then the article jobs (to get article urls)"""
+    """Main orchestrator, runs archive jobs (to get year links of archives), then the article jobs (to get article urls)."""
 
     with open(fp, "r") as a:
         archives: dict = json.load(a)
 
-    # Init async and open the session
+    # Init async and open the session.
     timer_start = time.time()
     semaphore = Semaphore(30)
     file_lock = Lock()
     async with create_session() as session:
 
-        # First we need to get the "year links" for each archive
+        # First we get the "year links" for each archive.
         archive_jobs = [
-            (domain, scrape_archive(url, domain, session, semaphore)) # List of (domain, coroutine)
+            (domain, scrape_archive(url, domain, session, semaphore)) # Add the domain.
             for domain, urls in archives.items()
             for url in urls
         ]
-        # Gather the coroutines and await, this shouldn't take long
+        # Gather the coroutines and await, this shouldn't take long.
         logger.info(f'Scraping {len(archive_jobs)} archive links....')
         archive_results = await gather(*[coro for _, coro in archive_jobs],
             return_exceptions=True
@@ -250,7 +250,7 @@ async def scraper(fp: str = POLICE_ARCHIVES_FP):
             # todo this last thing is gonna have to go
             for url in (urls if isinstance(urls, list) else [urls])
         ]
-        # Gather the coroutines and await
+        # Gather the coroutines and await.
         if {len(archives) - failed_archives} != {len(archives)}:
             logger.error(f"All years not scraped: {len(archives) - failed_archives}/{len(archives)}. Exiting... ")
             return None
@@ -259,19 +259,17 @@ async def scraper(fp: str = POLICE_ARCHIVES_FP):
             return_exceptions=True
         )
 
-        # Process the final results
+        # Process the final results.
         saved_articles, failed_articles, articles_processed, total_pages = process_article_results(article_results)
 
-    # Final count
+    # Final count,
     timer_end = time.time()
     elapsed_seconds = timer_end - timer_start
     formatted_time = str(timedelta(seconds=elapsed_seconds))
     logger.info(f"Finished scraping in {formatted_time}")
     logger.info(f"Processed {articles_processed} articles from {total_pages} pages, saved {saved_articles}, failed {failed_articles}")
     logger.info(f"Exiting...")
-
-    # Linter return
-    return None
+    exit(0)
 
 
 def main():

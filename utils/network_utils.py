@@ -25,16 +25,13 @@ def create_session():
 
 
 # Function to fetch target url and return its bytes
-async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False) -> bytes | None:
+async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False)-> bytes | None:
     logger = get_logger('network')
-    # gov_site ==> longer retry timeout
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:
         for attempt in range(MAX_RETRIES):
-            # Incrementally increase the wait time
-            wait_time = 3 ** attempt
+            wait_time = 3 ** attempt # Incrementally increase the wait time
             try:
-                # Make the http request
                 async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
 
                     if response.status == 200:

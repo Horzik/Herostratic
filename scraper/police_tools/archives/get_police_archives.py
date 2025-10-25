@@ -2,10 +2,9 @@ import asyncio
 import json
 import logging
 import random
-from urllib.parse import urljoin
-
 import aiofiles
 import aiohttp
+from urllib.parse import urljoin
 from typing import Tuple
 from bs4 import BeautifulSoup
 
@@ -24,9 +23,9 @@ init_logging(config)
 logger = get_logger('get_popo_archives')
 
 
-# Returns the link to an archive of the target police site
+# Returns (preferably all) links to archives of the target police site
 # TODO! FIX, returns 2 wrong links year links lol ALSO we need to return the NON-YEAR links !
-async def get_police_archive(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Tuple[str, str] | None:
+async def get_police_archives(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Tuple[str, str] | None:
     await asyncio.sleep(random.uniform(2, 5))
     try:
         main_content_bytes = await get_bytes(url, session, semaphore, gov_site=True)
@@ -100,7 +99,7 @@ async def scraper():
     async with create_session() as session:
         # Get the tasks and await for results
         archive_tasks = [
-            get_police_archive(url, session, semaphore)
+            get_police_archives(url, session, semaphore)
             for url in sites
         ]
         results = await asyncio.gather(*archive_tasks, return_exceptions=True)

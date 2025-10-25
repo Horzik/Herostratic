@@ -22,12 +22,9 @@ def main():
         urls = [line.strip() for line in s]
     with open(NOSITEMAPS_FP, "w") as n:
         for url in urls:
-            # Add the "robots.txt" parameter
             robots_txt: str = url + "/robots.txt"
-            # Init, prepare, and run the RP
             rp = RobotFileParser()
             rp.set_url(robots_txt)
-
             try:
                 rp.read()
             except Exception as e:

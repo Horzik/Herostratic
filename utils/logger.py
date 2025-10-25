@@ -1,15 +1,37 @@
+"""
+    UnderLicense
+
+setup(
+    name='tordl',
+    packages=find_packages(where='tordl'),
+    package_dir={
+        '': 'tordl'
+    },
+    version='1.10',
+    license='MIT',
+    description='CLI Torrent Search and Download',
+    author='x0r0x',
+    author_email='jakub.schimer@protonmail.com',
+    url='https://github.com/X0R0X/cli-torrent-dl/',
+    download_url='https://github.com/X0R0X/cli-torrent-dl/archive/refs/heads/master.zip',
+    keywords=['torrent', 'search', 'download', 'cli', 'curses'],
+    install_requires=load_requirements(),
+    classifiers=[
+        the_real_deal
+    ]
+"""
+
 import logging
 import os
 import sys
 from enum import Enum
-from logging.handlers import RotatingFileHandler
 from io import TextIOWrapper
+from logging.handlers import RotatingFileHandler
 
 
 # For one app with multiple components
 class BaseLogModule(Enum):
     pass
-
 
 # Config object/dataclass
 class LogConfig:

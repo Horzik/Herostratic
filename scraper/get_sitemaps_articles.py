@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 import logging
 from functools import partial
 
+from utils.io_utils import CriticalDataError
 from utils.logger import LogConfig, init_logging, get_logger, destroy
 from utils.network_utils import create_session, get_bytes
 from config import (
@@ -164,7 +165,7 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
             os.replace(tmp_name, ARTICLES_FP)
             logger.info(f"{domain} complete: {len(all_articles)} URLs")
         # TODO something on error (retry strategy or log)
-        except Exception as e:
+        except CriticalDataError as e:
             logger.error(f"Error saving to {ARTICLES_FP}: {e}")
             if tmp_name and os.path.exists(tmp_name):
                 os.unlink(tmp_name) # Clean up temp the file
