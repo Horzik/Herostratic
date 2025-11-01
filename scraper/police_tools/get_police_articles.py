@@ -92,8 +92,7 @@ def process_archive_results(
     """
 
     sites = {}
-    # todo return the actual failed archive, not just int
-    failed_archives = 0
+    failed_archives = 0 # todo return the actual failed archive, not just int
     # Get the domains from tasks, check and process each result
     for (domain, _), arch_result in zip(archive_jobs, archive_results):
         # Check for failed coroutine results
@@ -239,7 +238,7 @@ async def scraper(fp: str = POLICE_ARCHIVES_FP):
         )
         # Process the archive results (years and their links are added to the sites)
         sites, failed_archives = process_archive_results(archive_jobs, archive_results)
-        logger.debug(f"Finished archive jobs in {time.time() - timer_start} seconds")
+        logger.debug(f"Finished archive jobs in {time.time() - timer_start} seconds") # todo time is weird
 
         # Next we scrape each of the year links for all relevant articles
         logger.debug(f"Preparing article jobs")
@@ -247,12 +246,14 @@ async def scraper(fp: str = POLICE_ARCHIVES_FP):
             ((domain, year), scrape_listings(url, year, domain, session, semaphore, file_lock)) # List of ((domain, year), coroutine)
             for domain, years in sites.items()
             for year, urls in years.items()
-            # todo this last thing is gonna have to go
+            # todo do this uniformly OR use some OOP trix
             for url in (urls if isinstance(urls, list) else [urls])
         ]
         # Gather the coroutines and await.
         if {len(archives) - failed_archives} != {len(archives)}:
+            logger.error(f"Error: failed parsing archive links:: {failed_archives}")
             logger.error(f"All years not scraped: {len(archives) - failed_archives}/{len(archives)}. Exiting... ")
+            # logger.error(f"CONTINUING ANYWAYS")
             return None
         logger.info(f"Scraping {len(article_jobs)} tasks from {len(archives) - failed_archives}/{len(archives)} archives...")
         article_results = await gather(*[ coro for _, coro in article_jobs],

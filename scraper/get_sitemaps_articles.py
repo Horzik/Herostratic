@@ -164,7 +164,7 @@ async def process_domain(domain: str, sitemaps: list[str], session: aiohttp.Clie
                 tmp_name = tmp.name
             os.replace(tmp_name, ARTICLES_FP)
             logger.info(f"{domain} complete: {len(all_articles)} URLs")
-        # TODO something on error (retry strategy or log)
+        # TODO something on error (another retry or log)
         except CriticalDataError as e:
             logger.error(f"Error saving to {ARTICLES_FP}: {e}")
             if tmp_name and os.path.exists(tmp_name):

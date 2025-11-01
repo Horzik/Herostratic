@@ -21,7 +21,7 @@ POLICE_SITES_FP = INPUT_DIR / "police_sites.txt"
 # Scrape Output
 SITEMAPS_FP = OUTPUT_DIR / "sitemaps.json"
 NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
-ARTICLES_FP = OUTPUT_DIR / "articles.json"
+ARTICLES_FP = OUTPUT_DIR / "articles3.json"
 HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
@@ -34,6 +34,7 @@ EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej',
 URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer', 'cmaral', ]
 EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis']
 ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
+DECODE_FORMATS = ['utf-8', 'windows-1250', 'iso-8859-2']
 
 # Sitemap constants
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"

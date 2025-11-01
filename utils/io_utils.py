@@ -1,12 +1,13 @@
+from functools import partial
+import xml.etree.ElementTree as ET
 import asyncio
 import json
 import logging
 import os
 import tempfile
-
 import aiofiles
 
-from config import LOG_DIR, ERRORS_LOG_FP
+from config import LOG_DIR, ERRORS_LOG_FP, DECODE_FORMATS, INPUT_DIR
 from utils.logger import LogConfig, init_logging, get_logger
 
 
@@ -27,7 +28,7 @@ class CriticalDataError(Exception):
 
 async def async_json_read(fp: str) -> dict:
     """
-        Helper to read json asynchronously
+        Helper to read json asynchronously \n
         Return the result OR return an empty dict
 
     """
@@ -46,7 +47,7 @@ async def async_json_read(fp: str) -> dict:
 
 def atomic_json_write(data: dict, fp: str):
     """
-        Helper to write json 'atomically': first writes to a tmp file
+        Helper to write json 'atomically': first writes to a tmp file \n
         and only then to the target file (cleans up the tmp file afterward)
 
     """
@@ -61,3 +62,25 @@ def atomic_json_write(data: dict, fp: str):
             os.unlink(tmp_name)
         logger.critical(f"!!CRITICAL ERROR WRITING RESULTS TO'!!", exc_info=True)
         raise CriticalDataError(f"Failed to write {fp}") from r
+
+
+async def parse_xml_tree(content_bytes: bytes, url: str) -> ET.Element | None:
+    for encoding in DECODE_FORMATS: # Try various encodings because issues           z
+        try:
+            decoded_bytes = content_bytes.decode(encoding)
+            if len(decoded_bytes) <= 10: # Return if no content
+                return logger.warning(f"No content for {url}, skipping")
+            loop = asyncio.get_event_loop()
+            # noinspection PyTypeChecker
+            element_tree: ET.Element = await loop.run_in_executor(
+                None, partial(ET.fromstring, decoded_bytes))
+            return element_tree
+        except UnicodeDecodeError as e:
+            logger.error(f"UnicodeDecodeError with {encoding}: {e}")
+            continue
+        except ET.ParseError as e:
+            logger.error(f"ParseError with {encoding}: {e}")
+            logger.error(f"First 500 chars with {encoding}:")
+            continue
+    else:
+        return logger.warning(f"Could not parse {url} with any encoding")

@@ -183,8 +183,6 @@ async def scraper():
     semaphore = asyncio.Semaphore(30)
     file_lock = asyncio.Lock()
 
-
-
     async with create_session() as session:
         article_jobs = [
                         ((domain, year, url), scrape_article(url, domain, year, session, semaphore, file_lock))
