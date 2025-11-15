@@ -28,7 +28,9 @@ def process_year_elements(year_table: ResultSet[Tag], url: str) -> YearLinks:
 
     all_years: YearLinks = {}
     for element in year_table:
+        logger.debug(f"Year table of '{url}' :: {year_table}")
         year_href = element.get('href')
+        logger.debug(f"year href of '{url}' :: {year_href}")
 
         if year_href.startswith('http'):
             # Some refs have the base url already
@@ -72,6 +74,7 @@ async def validate_year_links(all_years: YearLinks, url: str, session: ClientSes
     """
     try:
         for year, link_or_links in all_years.items():
+            logger.debug(f"Validating year {year} for '{link_or_links}'")
             # Handle both single URL and list of URLs
             links = [link_or_links] if isinstance(link_or_links, str) else link_or_links
 
@@ -134,6 +137,7 @@ async def parse_jihomor_archive(soup: BeautifulSoup, session: ClientSession, sem
 def select_years_table(domain: str, url: str, soup: BeautifulSoup) -> ResultSet[Tag] | None:
     """ Find the correct years table element on the archive page """
 
+    # TODO IF ZLIN OR VYS ==> SELECT A DIFFERENT TABLE
     years_table = soup.select(POLICE_SELECTOR['archive_selectors']['year_links'])
     if not years_table:
         # Try the most common selectors first

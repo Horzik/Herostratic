@@ -13,7 +13,7 @@ class BaseScraper(ABC):
     """ Base class for async scrapers. Handles session/semaphore. \n
         Open and run the children as context managers.
     """
-    SITE_NAME: str = None
+    MODULE_NAME: str = None
     BASE_URL: str = None
     INPUT_FILE: Path = None
     OUTPUT_FILE: Path = None
@@ -23,7 +23,7 @@ class BaseScraper(ABC):
 
     def __init__(self):
         init_logging(self.LOG_CONFIG)
-        self.logger = get_logger(f'{self.SITE_NAME}_scraper')
+        self.logger = get_logger(f'{self.MODULE_NAME}_scraper')
         self.lock = Lock()
         self._session = None # Create on enter, close on exit
         self._semaphore = Semaphore(self.SEMAPHORE_COUNT)
@@ -40,7 +40,7 @@ class BaseScraper(ABC):
         if self._session:
             await self._session.__aexit__(exc_type, exc_val, exc_tb)
 
-    @abstractmethod
+    # @abstractmethod
     async def parser(self, url):
         return NotImplementedError
 

@@ -7,13 +7,15 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from config import POLICE_ARCHIVES_FP, POLICE_SITES_FP, LOG_DIR, ERRORS_LOG_FP
-from scraper.oop_police import BaseScraper
+from scraper.core import BaseScraper
 from scraper.site_configs import BASE_POLICE_URL, POLICE_ARCHIVE_SELECTORS
 from utils.logger import LogConfig, destroy
 
-# TODO this does NOT parse all archives correctly ==> ZLK and VYS are returning wrong links (not the ones with year links)
+
+# todo 1 ==> verify we are getting the correct links
+# todo 2 ==> print/log all processed archives and the failed ones (or something)
 class ScrapeArchive(BaseScraper):
-    SITE_NAME = 'popo_archives'
+    MODULE_NAME = 'poop_archives'
     BASE_URL = BASE_POLICE_URL
     INPUT_FILE = POLICE_SITES_FP
     OUTPUT_FILE = POLICE_ARCHIVES_FP
@@ -21,65 +23,82 @@ class ScrapeArchive(BaseScraper):
     SEMAPHORE_COUNT = 30
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
-        log_file_path=LOG_DIR / 'get_oop_archives.log',
+        log_file_path=LOG_DIR / 'oop_archives.log',
         log_errors_file_path=ERRORS_LOG_FP
     )
 
+    @staticmethod
+    def get_municipality_name(municipality_element) -> str:
+        if municipality_element:
+            municipality = municipality_element['alt'].strip(' název')
+            if municipality == "Název kraj":
+                municipality = "Olomoucký kraj"
+            if municipality == "Krajské ředitelství policie kraje Vysočina":
+                municipality = "Kraj Vysočina"
+            if municipality == "Krajské ředitelství Zlk":
+                municipality = "Zlínský Kraj"
+            if municipality == "Krajské ředitelství policie Lbk":
+                municipality = "Liberecký Kraj"
+        else:
+            municipality = "Informační servis"
+        return municipality.strip(" -")
+
+    async def validate_link(self, link):
+        # todo this is not a great validation, not sure what would be the best (if anything)
+        content = await self.fetch(link)
+        if content is None:
+            self.logger.error(f"Error while validating, content not found for: '{link}'")
+            self.errors.append(link)
+            self.pages_scraped += 1
+            return False
+        soup = BeautifulSoup(content, 'lxml')
+        pager = soup.select_one('p.pager')
+        if pager:
+            self.logger.error(f"Failed validating archive link: '{link}'")
+            self.errors.append(link)
+            self.pages_scraped += 1
+            return False
+        else:
+            self.logger.debug(f"Validated link: '{link}'")
+            self.pages_scraped += 1
+            return True
+
     async def parser(self, url):
+        self.logger.info(f"Parsing link: '{url}'...")
         main_content_bytes = await self.fetch(url)
         main_soup = BeautifulSoup(main_content_bytes, 'lxml')
 
-        # Get the police municipality for this archive
+        # Get the municipality of this site
         municipality_element = main_soup.select_one(POLICE_ARCHIVE_SELECTORS['municipality'])
-        if municipality_element:
-            municipality = municipality_element['alt'].strip(' název')
-        else:
-            self.logger.warning(f'Error, no municipality element for url {url}')
-            municipality = ''
+        municipality = self.get_municipality_name(municipality_element)
 
-        # If we get archive link => win, return
-        archive_element = main_soup.select_one(POLICE_ARCHIVE_SELECTORS['archive_link'])
-        if archive_element:
-            self.logger.debug(f"Getting ref: {archive_element.get('href')}")
-            archive_link = urljoin(BASE_POLICE_URL, archive_element.get('href'))
-            if archive_link:
-                self.logger.info(f"Returning:: '{archive_link}' for url:: '{url}'")
-                return municipality, archive_link
+        # Special cases
+        if municipality in ["Informační servis", "hl. m. Praha"]:
+            archive_element = main_soup.select_one(POLICE_ARCHIVE_SELECTORS['archive_link'])
+            if archive_element:
+                archive_link = urljoin(BASE_POLICE_URL, archive_element.get('href'))
+                if archive_link:
+                    self.logger.debug(f"Returning zpr link:: '{archive_link}' for url:: '{url}'")
+                    return municipality, archive_link
 
-        # Else it's harder, go to the "zpravodajstvi" link
+        # Else just get the "zpravodajství" link
         zpr_ref = main_soup.select_one(POLICE_ARCHIVE_SELECTORS['news_link'])
         if zpr_ref:
             self.logger.debug(f"Getting zprv ref: {zpr_ref.get('href')}")
-            # Check if the archive links are in here
             zpr_link = urljoin(BASE_POLICE_URL, zpr_ref.get('href').lstrip('/'))
-            zpravodajstvi_bytes = await self.fetch(zpr_link)
-            second_soup = BeautifulSoup(zpravodajstvi_bytes, 'lxml')
-            year_links = second_soup.select('a[href*="2024"], a[href*="2023"], a[href*="2022"]')
+            return municipality, zpr_link
 
-            if len(year_links) == 3:
-                self.logger.info(f"Returning:: '{zpr_link}' for url:: '{url}'")
-                return municipality, zpr_link
-            elif len(year_links) == 1:
-                archive_link = urljoin(BASE_POLICE_URL, year_links[0].get('href'))
-                self.logger.info(f"Returning:: {archive_link} for url:: '{url}'")
-                return municipality, archive_link
-            else:
-                # Last change, try finding the archive link over there (we love the police)
-                second_archive_element = second_soup.select_one(POLICE_ARCHIVE_SELECTORS['content_archiv'])
-                self.logger.debug(f"Getting second arch ref: {second_archive_element.get('href')}")
-                second_archive_link = urljoin(BASE_POLICE_URL, second_archive_element.get('href').lstrip('/'))
-                if second_archive_link:
-                    self.logger.info(f"Returning:: '{second_archive_link}' for url:: '{url}'")
-                    return municipality, second_archive_link
         return None
 
-    def process_results(self, results):
+    async def process_results(self, results):
         archive_dict = {}
         for i, result in enumerate(results):
             if isinstance(result, Exception) or result is None:
                 self.logger.warning(f"Warning: Task {i} failed due to unknown issue: {result}")
                 continue
             municipality, archive_link = result
+            if not await self.validate_link(archive_link):
+                continue
             archive_dict.setdefault(municipality, []).append(archive_link)
         return archive_dict
 
@@ -104,14 +123,15 @@ class ScrapeArchive(BaseScraper):
 
         tasks = self.prepare_tasks(self.INPUT_FILE)
         results = await self.scrape(tasks)
-        processed_res = self.process_results(results)
+        processed_res = await self.process_results(results)
         await self.write_results(processed_res)
 
         duration = timedelta(seconds=time.perf_counter() - start_time)
-        self.logger.info(f"Finished in {duration}, exiting...")
+        self.logger.info(f"Finished in {duration}, validated {self.pages_scraped - len(self.errors)}/{self.pages_scraped} links, exiting...")
 
 async def main():
     async with ScrapeArchive() as scr:
+        # todo does the try block here make sense?
         try:
             await scr.run()
         finally:

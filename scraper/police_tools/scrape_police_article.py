@@ -23,7 +23,7 @@ logConfig = LogConfig(
         log_errors_file_path=ERRORS_LOG_FP
 )
 init_logging(logConfig)
-logger = get_logger('get_popo_articles')
+logger = get_logger('scrape_popo_articles')
 
 
 # todo write failed articles?
@@ -140,7 +140,7 @@ async def scrape_article(url, domain, year, session, semaphore, file_lock):
         # Add 'id' (probably added in the DB automatically? Or huh)
         result['title'] = title_ref[0].get_text()
         result['url'] = url
-        # Add 'scraped_at' right here
+        # Add 'scraped_at'
         result['year'] = year
         result['date'] = date_text
         result['municipality'] = domain

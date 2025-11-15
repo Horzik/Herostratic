@@ -1,4 +1,5 @@
-from config import POLICE_ARTICLES_FP, URL_KEYWORDS, LOG_DIR, ERRORS_LOG_FP, POLICE_ARCHIVES_FP, YEAR_LINKS_FP
+from config import POLICE_ARTICLES_FP, URL_KEYWORDS, LOG_DIR, ERRORS_LOG_FP, POLICE_ARCHIVES_FP, YEAR_LINKS_FP, \
+    FAILED_ARCHIVES_FP
 from scraper.police_tools.archives.get_year_links import scrape_archive
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.io_utils import async_json_read, atomic_json_write, CriticalDataError
@@ -82,42 +83,42 @@ def process_article_results(article_results: list) -> ArticleResultsMetadata:
 
     return saved_articles, failed_articles, articles_processed, total_pages
 
-
-def process_archive_results(
-    archive_jobs: list,
-    archive_results: list
-) -> ArchiveResultsMetadata:
-    """ Process all archive results from parsing the archive pages. \n
-        Return the target sites and number of failed tasks.
-    """
-
-    sites = {}
-    failed_archives = 0 # todo return the actual failed archive, not just int
-    # Get the domains from tasks, check and process each result
-    for (domain, _), arch_result in zip(archive_jobs, archive_results):
-        # Check for failed coroutine results
-        if isinstance(arch_result, Exception):
-            logger.error(f"Error for archive task for domain: '{domain}'...")
-            logger.error(f"Archive result:: {arch_result}")
-            failed_archives += 1
-            continue
-        if arch_result is None:
-            logger.error(f"Error: domain '{domain}' returns {arch_result}....")
-            failed_archives += 1
-            continue
-
-        domain, year_links = arch_result
-        if domain not in sites:
-            sites[domain] = {}
-        sites[domain].update(year_links)
-
-    # Write for debug and clarity (not actually part of the pipe)
-    logger.debug(f"Writing year links results....")
-    with open(YEAR_LINKS_FP, 'w') as f:
-        json.dump(sites, f, ensure_ascii=False, indent=2)
-    logger.debug(f"Results:: {sites}")
-
-    return sites, failed_archives
+#
+# def process_archive_results(
+#     archive_jobs: list,
+#     archive_results: list
+# ) -> ArchiveResultsMetadata:
+#     """ Process all archive results from parsing the archive pages. \n
+#         Return the target sites and number of failed tasks.
+#     """
+#
+#     sites = {}
+#     failed_archives = 0 # todo return the actual failed archive, not just int
+#     # Get the domains from tasks, check and process each result
+#     for (domain, _), arch_result in zip(archive_jobs, archive_results):
+#         # Check for failed coroutine results
+#         if isinstance(arch_result, Exception):
+#             logger.error(f"Error for archive task for domain: '{domain}'...")
+#             logger.error(f"Archive result:: {arch_result}")
+#             failed_archives += 1
+#             continue
+#         if arch_result is None:
+#             logger.error(f"Error: domain '{domain}' returns {arch_result}....")
+#             failed_archives += 1
+#             continue
+#
+#         domain, year_links = arch_result
+#         if domain not in sites:
+#             sites[domain] = {}
+#         sites[domain].update(year_links)
+#
+#     # Write for debug and clarity (not actually part of the pipe)
+#     logger.debug(f"Writing year links results....")
+#     with open(YEAR_LINKS_FP, 'w') as f:
+#         json.dump(sites, f, ensure_ascii=False, indent=2)
+#
+#     logger.debug(f"Results:: Found {len(sites)} sites:: {sites}")
+#     return sites, failed_archives
 
 
 def parse_articles_listing(
@@ -162,7 +163,7 @@ def parse_articles_listing(
         next_page_link = next_page['href']
         current_url = BASE_POLICE_URL + next_page_link
         pages_scraped += 1
-        logger.debug(f"Continuing to page {pages_scraped}/{max_pages} in year {year} for: '{domain}'")
+        # logger.debug(f"Continuing to page {pages_scraped}/{max_pages} in year {year} for: '{domain}'")
     else:
         # Else stop the loop and write the collected articles
         logger.info(f"No next page found, checked {all_articles_count} articles")
@@ -225,42 +226,43 @@ async def scraper(fp: str = POLICE_ARCHIVES_FP):
     file_lock = Lock()
     async with create_session() as session:
 
-        # First we get the "year links" for each archive.
-        archive_jobs = [
-            (domain, scrape_archive(url, domain, session, semaphore)) # Add the domain.
-            for domain, urls in archives.items()
-            for url in urls
-        ]
-        # Gather the coroutines and await, this shouldn't take long.
-        logger.info(f'Scraping {len(archive_jobs)} archive links....')
-        archive_results = await gather(*[coro for _, coro in archive_jobs],
-            return_exceptions=True
-        )
-        # Process the archive results (years and their links are added to the sites)
-        sites, failed_archives = process_archive_results(archive_jobs, archive_results)
-        logger.debug(f"Finished archive jobs in {time.time() - timer_start} seconds") # todo time is weird
+        # TODO WIP make this a separate scraper
+        # # First we get the "year links" for each archive.
+        # archive_jobs = [
+        #     (domain, get_year_links(url, domain, session, semaphore)) # Add the domain.
+        #     for domain, urls in archives.items()
+        #     for url in urls
+        # ]
+        # # Gather the coroutines and await, this shouldn't take long.
+        # logger.info(f'Scraping {len(archive_jobs)} archive links....')
+        # archive_results = await gather(*[coro for _, coro in archive_jobs],
+        #     return_exceptions=True
+        # )
+        # # Process the archive results (years and their links are added to the sites)
+        # sites, failed_archives = process_archive_results(archive_jobs, archive_results)
+        # logger.debug(f"Finished archive jobs in {time.time() - timer_start} seconds")
+        #
+        # if {len(archives) - failed_archives} != {len(archives)}:
+        #     logger.error(f"Error: failed parsing archive links:: {failed_archives}")
+        #     logger.error(f"All years not scraped: {len(archives) - failed_archives}/{len(archives)}. Exiting... ")
+        #     # logger.error(f"CONTINUING ANYWAYS")
+        #     return None
 
-        # Next we scrape each of the year links for all relevant articles
-        logger.debug(f"Preparing article jobs")
+        # TODO We just feed the archives directly here for now
+        with open(FAILED_ARCHIVES_FP, 'r') as f:
+            arch_sites = json.load(f)
+
         article_jobs = [
             ((domain, year), scrape_listings(url, year, domain, session, semaphore, file_lock)) # List of ((domain, year), coroutine)
-            for domain, years in sites.items()
+            for domain, years in arch_sites.items()
             for year, urls in years.items()
-            # todo do this uniformly OR use some OOP trix
-            for url in (urls if isinstance(urls, list) else [urls])
+            for url in (urls if isinstance(urls, list) else [urls]) # todo do this uniformly OR use some OOP trix
         ]
-        # Gather the coroutines and await.
-        if {len(archives) - failed_archives} != {len(archives)}:
-            logger.error(f"Error: failed parsing archive links:: {failed_archives}")
-            logger.error(f"All years not scraped: {len(archives) - failed_archives}/{len(archives)}. Exiting... ")
-            # logger.error(f"CONTINUING ANYWAYS")
-            return None
-        logger.info(f"Scraping {len(article_jobs)} tasks from {len(archives) - failed_archives}/{len(archives)} archives...")
+        # logger.info(f"Scraping {len(article_jobs)} tasks from {len(archives) - failed_archives}/{len(archives)} archives...")
         article_results = await gather(*[ coro for _, coro in article_jobs],
             return_exceptions=True
         )
 
-        # Process the final results.
         saved_articles, failed_articles, articles_processed, total_pages = process_article_results(article_results)
 
     # Final count,

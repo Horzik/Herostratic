@@ -1,9 +1,8 @@
 import asyncio
 import logging
 import xml.etree.ElementTree as ET
-from os import close
 
-from scraper.oop_police import BaseScraper
+from scraper.core import BaseScraper
 from utils.io_utils import async_json_read, parse_xml_tree
 from utils.logger import LogConfig, destroy
 from config import (
@@ -12,7 +11,7 @@ from config import (
 
 # Unlike the original this writes all results at the end (not for each domain)
 class ScrapeSitemapArticles(BaseScraper):
-    SITE_NAME = 'SITEMAP_ARTICLES'
+    MODULE_NAME = 'SITEMAP_ARTICLES'
     BASE_URL = None
     INPUT_FILE = SITEMAPS_FP
     OUTPUT_FILE = ARTICLES_FP
