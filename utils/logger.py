@@ -46,7 +46,7 @@ class LogConfig:
             log_file_max_size: int = 1 * 1024 ** 2,
             log_file_backup_count: int = 10,
             log_format: str = (
-                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                    '%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(message)s'
             ),
     ):
         self.log_module_cls = log_module_cls

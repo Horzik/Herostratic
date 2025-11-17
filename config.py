@@ -32,11 +32,13 @@ JIHOMOR_LINKS_FP = OUTPUT_DIR / "jihomor_links.json"
 FAILED_ARCHIVES_FP = INPUT_DIR / "failed_archives.json"
 
 # Parsing and scraping filters and keywords
-EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']
+EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika'] # TODO USE?????
 URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer', 'cmaral', ]
-EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis']
+EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis'] # TODO also use????
 ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
 DECODE_FORMATS = ['utf-8', 'windows-1250', 'iso-8859-2']
+EXCLUDE_ARCHIVE_KEYWORDS = ['nehody', 'násil', 'nasil']
+EXCLUDE_SOCIAL_KEYWORDS = ['mailto:','twitter.com/share', 'facebook.com/sharer', 'q=cHJuPTE%3d']
 
 # Sitemap constants
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"

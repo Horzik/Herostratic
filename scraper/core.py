@@ -58,4 +58,4 @@ class BaseScraper(ABC):
         async with self.lock:
             async with aiofiles.open(self.OUTPUT_FILE, "w", encoding='utf-8') as p:
                 await p.write(json.dumps(processed_results, indent=2, ensure_ascii=False))
-                self.logger.info(f"Saved to {self.OUTPUT_FILE}")
+                self.logger.info(f"Saved results to '{self.OUTPUT_FILE}'")

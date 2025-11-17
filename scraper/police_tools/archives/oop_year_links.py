@@ -12,7 +12,8 @@ from bs4 import BeautifulSoup, ResultSet, Tag
 from scraper.core import BaseScraper
 from scraper.police_tools.archives.municipality_strategies import MUNICIPALITY_PARSERS
 from utils.logger import LogConfig, destroy
-from config import POLICE_ARCHIVES_FP, YEAR_LINKS_FP, LOG_DIR, ERRORS_LOG_FP
+from config import POLICE_ARCHIVES_FP, YEAR_LINKS_FP, LOG_DIR, ERRORS_LOG_FP, EXCLUDE_ARCHIVE_KEYWORDS, \
+    EXCLUDE_SOCIAL_KEYWORDS
 from scraper.site_configs import BASE_POLICE_URL, POLICE_SELECTOR, TABLE_SELECTORS, DOMAIN_SELECTORS, \
     POLICE_ARCHIVE_SELECTORS
 
@@ -31,36 +32,42 @@ class YearLinksScraper(BaseScraper):
         log_errors_file_path=ERRORS_LOG_FP
     )
 
+    def __init__(self):
+        super().__init__()
+        self.validated_links = 0
+
 
     def process_archive_results(self, archive_jobs: list, archive_results: list) -> tuple:
         """ Process all archive results from parsing the archive pages. \n
             Return the target sites and number of failed tasks.
         """
-
         sites = {}
         failed_archives = 0 # todo return the actual failed archive, not just int
         # Get the domains from tasks, check and process each result
-        for (domain, _), arch_result in zip(archive_jobs, archive_results):
+        for (domain, huh), arch_result in zip(archive_jobs, archive_results):
             if isinstance(arch_result, Exception):
                 self.logger.error(f"Error for archive task for domain: '{domain}'...")
-                self.logger.error(f"Archive result:: {arch_result}")
+                self.logger.error(f"Task '{huh}', result:: {arch_result}")
+                self.errors.append(f"Domain '{domain}' failed. Task::'{huh}'. Result:: '{arch_result}'")
+                self.pages_scraped += 1
+
                 failed_archives += 1
                 continue
             if arch_result is None:
                 self.logger.error(f"Error: domain '{domain}' returns {arch_result}....")
                 failed_archives += 1
+                self.pages_scraped += 1
+
                 continue
 
             domain, year_links = arch_result
             sites.setdefault(domain, []).append(year_links)
-            # if domain not in sites:
-            #     sites[domain] = {}
-            # sites[domain].update(year_links)
+            self.pages_scraped += 1
 
-        # Write for debug and clarity (not actually part of the pipe)
-        self.logger.debug(f"Writing year links results....")
-        with open(YEAR_LINKS_FP, 'w') as f:
-            json.dump(sites, f, ensure_ascii=False, indent=2)
+        # # Write for debug and clarity (not actually part of the pipe)
+        # self.logger.debug(f"Writing year links results....")
+        # with open(YEAR_LINKS_FP, 'w') as f:
+        #     json.dump(sites, f, ensure_ascii=False, indent=2)
 
         self.logger.debug(f"Results:: Found {len(sites)} sites:: {sites}")
         return sites, failed_archives
@@ -68,48 +75,57 @@ class YearLinksScraper(BaseScraper):
 
     def process_year_elements(self, year_table: ResultSet[Tag], url: str) -> dict:
         """ Process the target 'year link' table for year links """
-
-        all_years: dict = {}
+        all_year_links: dict = {}
         for element in year_table:
             year_href = element.get('href')
-            if year_href.startswith('http'): # Some refs have the base url already
+
+            if year_href.startswith('http'):
+                # Some refs have the base url already
                 year_link = year_href
-            else: # While others don't
+            else:
+                # While others don't
                 year_link = BASE_POLICE_URL + year_href
 
             if not year_link:
                 self.logger.error(f"Missing year_link for url: '{url}'...")
                 self.logger.error(f"The failed year element: {element}")
                 continue
+            if any(key in year_link for key in EXCLUDE_ARCHIVE_KEYWORDS): # Skip "nehody" archives and 'nasilne'
+                continue
+            if any(key in year_link for key in EXCLUDE_SOCIAL_KEYWORDS): # Skip media links
+                continue
 
             year_text = element.get_text(strip=True)
             try:
-                match = re.search(r'\b(20\d{2})\b', year_text) # Get only the year from the text
-                if not match:
-                    continue
-                year = match.group(1)
+                year_match = re.search(r'\b(20\d{2})\b', year_text) # Get only the year from the text
+                if not year_match:
+                    year = "???"
+                else:
+                    year = year_match.group(1)
 
-                if year not in all_years:
-                    all_years[year] = []
-                all_years[year].append(year_link)
+                if year not in all_year_links:
+                    all_year_links[year] = []
+                all_year_links[year].append(year_link)
+
+                for year in all_year_links: # Dedupe
+                    all_year_links[year] = list(dict.fromkeys(all_year_links[year]))
 
             except ValueError:
                 self.logger.exception(f"Failed to parse year '{year_text}' ...")
                 raise
 
-        if (len(all_years)) == 0:
+        if (len(all_year_links)) == 0:
             self.logger.error(f"Couldn't find any year links in: '{url}'...")
             self.logger.error(f"The failed field table ::: {year_table}")
             raise ValueError("No year links found")
-
-        return all_years
+        self.logger.debug(f"All processed year links:: ${all_year_links}")
+        return all_year_links
 
 
     async def validate_links(self, all_years: dict, url: str) -> bool:
         """ Gets the content of each link and verifies it contains the article listings. \n
             Note. Does not produce or read any stats, just checks...
         """
-
         try:
             for year, link_or_links in all_years.items():
                 # Handle both single URL and list of URLs
@@ -121,22 +137,22 @@ class YearLinksScraper(BaseScraper):
                     soup = BeautifulSoup(content, 'lxml')
                     # Check if there is the page navigation
                     pager = soup.select_one('p.pager')
-                    if not pager:
+                    if pager:
+                        self.validated_links += 1
+                    else:
                         self.logger.error(f"Failed validating year link '{link}' for year '{year}'")
-                        self.errors.append(f"Failed year link '{link}' for year '{year}'")
                         return False
-                    self.pages_scraped += 1
             return True
         except Exception:
             self.logger.exception(f"Error for validating year links in url '{url}...'")
             raise
+
 
     async def parse_jihomor_archive(self, soup: BeautifulSoup) -> dict:
         """
             Get the year table, and crawl through to get the years links. \n
             First link => Second link => Multiple urls per year.
         """
-
         jihomor_years: dict = {}
         content_el = soup.select_one(POLICE_SELECTOR['article_selectors']['content'])
         years_table = content_el.select('p:nth-of-type(2) a')
@@ -182,144 +198,31 @@ class YearLinksScraper(BaseScraper):
 
     def select_years_table(self, domain: str, url: str, soup: BeautifulSoup) -> ResultSet[Tag] | None:
         """ Find the correct years table element on the archive page """
-
-        # TODO IF ZLIN OR VYS ==> SELECT A DIFFERENT TABLE
-        years_table = soup.select(POLICE_SELECTOR['archive_selectors']['year_links'])
-        if not years_table:
-            # Try the most common selectors first
-            for i, og_selector in enumerate(TABLE_SELECTORS):
-                years_table = soup.select(og_selector)
+        # First parse the special cases
+        for municipalities, selector in DOMAIN_SELECTORS.items():
+            muni_list = [municipalities] if isinstance(municipalities, str) else municipalities
+            if any(muni in domain for muni in muni_list):
+                years_table = soup.select(selector)
                 if years_table:
-                    self.logger.debug(f'Found the years element selector on attempt {i + 1} for url: "{url}"...')
+                    self.logger.debug(f'Using the special years table')
                     return years_table
 
-            # Next try the special cases
-            for municipalities, selector in DOMAIN_SELECTORS.items():
-                muni_list = [municipalities] if isinstance(municipalities, str) else municipalities
-                # Check against the possible municipalities
-                if any(muni in domain for muni in muni_list):
-                    years_table = soup.select(selector)
-                    # if not years_table:
-                    #     self.logger.error(f"Table parse failed for url '{url}'")
-                    #     return None
-                    return years_table
+        # Then try the default one
+        years_table = soup.select(POLICE_SELECTOR['archive_selectors']['year_links'])
+        if years_table:
+            self.logger.debug(f'Using the default years table')
+            return years_table
 
-        # Just return the original
-        return years_table
+        # Finally try TABLE_SELECTORS
+        for i, og_selector in enumerate(TABLE_SELECTORS):
+            years_table = soup.select(og_selector)
+            if years_table:
+                self.logger.debug(f'Using the table_selectors years table')
+                return years_table
 
-    # async def parse_domain(self, domain, url, soup):
-    #     if "Informační servis" in domain or "hl. m. Praha" in domain:
-    #         # These two have ONLY the year links
-    #         years_table = self.select_years_table(domain, url, soup)
-    #         return self.process_year_elements(years_table, url)
-    #
-    #     if "Plzeňský kraj" in domain:
-    #         async def plzen_year_links():
-    #             plz_years_table = self.select_years_table(domain, url, soup)
-    #             return self.process_year_elements(plz_years_table, url)
-    #
-    #         async def plzen_non_year_links():
-    #             plzen_non_years = []
-    #             first_list_el = soup.select_one('div#content ul:nth-of-type(1)')
-    #             first_list = first_list_el.find_all('a')
-    #             for link in first_list:
-    #                 link_url = urljoin(BASE_POLICE_URL, link.get('href').lstrip('/'))
-    #                 plzen_non_years.append(link_url)
-    #
-    #             second_list_el = soup.select_one('div#content ul:nth-of-type(2)')
-    #             second_list_a = second_list_el.find_all('a')
-    #             for link in second_list_a:
-    #                 link_url = urljoin(BASE_POLICE_URL, link.get('href').lstrip('/'))
-    #                 plzen_non_years.append(link_url)
-    #
-    #             return plzen_non_years
-    #
-    #         plzen_links: dict = await plzen_year_links()
-    #         plzen_links["non_years"] = await plzen_non_year_links()
-    #         return plzen_links
-    #
-    #     if "Středočeský kraj" in domain:
-    #         async def stredo_year_links():
-    #             arch_el = soup.select_one('a[title="Archiv zpravodajství"]')
-    #             arch_link = urljoin(BASE_POLICE_URL, arch_el.get('href').lstrip('/'))
-    #             arch_bytes = await self.fetch(arch_link)
-    #             arch_soup = BeautifulSoup(arch_bytes, 'lxml')
-    #
-    #             stredo_years_table = self.select_years_table(domain, arch_link, arch_soup)
-    #             return self.process_year_elements(stredo_years_table, arch_link)
-    #
-    #         async def stredo_non_year_links():
-    #                 stredo_non_years = []
-    #                 list_el = soup.select_one('div#content ul:nth-of-type(1)')
-    #                 list_a = list_el.find_all('a')
-    #                 for link in list_a:
-    #                     link_url = urljoin(BASE_POLICE_URL, link.get('href').lstrip('/'))
-    #                     if "archiv" in link_url: # Skip the year archive link
-    #                         continue
-    #                     stredo_non_years.append(link_url)
-    #                 return stredo_non_years
-    #
-    #         stredo_links: dict = await stredo_year_links()
-    #         stredo_links["non_years"] = await stredo_non_year_links()
-    #         return stredo_links
-    #
-    #     if "Jihočeský kraj" in domain:
-    #         async def jiho_year_links():
-    #             arch_el = soup.select_one('a[title="Zpravodajství - archiv"]')
-    #             arch_link = urljoin(BASE_POLICE_URL, arch_el.get('href').lstrip('/'))
-    #             arch_bytes = await self.fetch(arch_link)
-    #             arch_soup = BeautifulSoup(arch_bytes, 'lxml')
-    #
-    #             stredo_years_table = self.select_years_table(domain, arch_link, arch_soup)
-    #             return self.process_year_elements(stredo_years_table, arch_link)
-    #
-    #         async def jiho_non_year_links():
-    #             jiho_non_years = []
-    #             first_list_el = soup.select_one('div#content ul:nth-of-type(1)')
-    #             first_list = first_list_el.find_all('a')
-    #             for link in first_list:
-    #                 link_url = urljoin(BASE_POLICE_URL, link.get('href').lstrip('/'))
-    #                 if "archiv" in link_url:  # Skip the year archive link
-    #                     continue
-    #                 jiho_non_years.append(link_url)
-    #
-    #             second_list_el = soup.select_one('div#content ul:nth-of-type(2)')
-    #             second_list_a = second_list_el.find_all('a')
-    #             for link in second_list_a:
-    #                 link_url = urljoin(BASE_POLICE_URL, link.get('href').lstrip('/'))
-    #                 jiho_non_years.append(link_url)
-    #
-    #             return jiho_non_years
-    #
-    #         jiho_links: dict = await jiho_year_links()
-    #         jiho_links["non_years"] = await jiho_non_year_links()
-    #         return jiho_links
-    #
-    #     if "Jihomor" in domain:
-    #         async def jihomor_year_links():
-    #             arch_element = soup.select_one(POLICE_ARCHIVE_SELECTORS['content_archiv'])
-    #             arch_link = urljoin(BASE_POLICE_URL, arch_element.get('href').lstrip('/'))
-    #             arch_bytes = await self.fetch(arch_link)
-    #             arch_soup = BeautifulSoup(arch_bytes, 'lxml')
-    #             return await self.parse_jihomor_archive(arch_soup)
-    #
-    #         async def jihomor_non_year_links():
-    #             jihomor_non_years_links = []
-    #             list_element = soup.select_one('div#content ul')
-    #             arch_elements = list_element.find_all('a')
-    #             for link in arch_elements:
-    #                 link_url = urljoin(BASE_POLICE_URL, link.get('href').lstrip('/'))
-    #                 if 'archiv' in link_url: # Skip the year archive link
-    #                     continue
-    #                 jihomor_non_years_links.append(link_url)
-    #             return jihomor_non_years_links
-    #
-    #         jihomor_links: dict = await jihomor_year_links()
-    #         jihomor_links["non_years"] = await jihomor_non_year_links()
-    #         return jihomor_links
-    #
-    #     self.logger.error(f"Error: failed getting links for {domain}, returning an empty dict...")
-    #     return {}
+        self.logger.error(f"Could not find year table for domain '{domain}'")
+        return None
+
 
     async def parse_domain(self, domain, url, soup):
         for key, parser_class in MUNICIPALITY_PARSERS.items():
@@ -330,9 +233,9 @@ class YearLinksScraper(BaseScraper):
         self.logger.error(f"No parser found for {domain}, returning empty dict...")
         return {}
 
+
     async def parse_archive(self, url: str, domain: str) -> dict | None:
         """ Parse the archive page to return the year links.  """
-
         archive_bytes = await self.fetch(url)
         if archive_bytes is None:
             self.logger.error(f"Failed fetching content for url '{url}'...")
@@ -340,8 +243,11 @@ class YearLinksScraper(BaseScraper):
 
         soup = BeautifulSoup(archive_bytes, 'lxml')
         all_links = await self.parse_domain(domain, url, soup)
-        validated = await self.validate_links(all_links, url)
+        if not all_links:
+            self.logger.error(f"No links found for domain '{domain}'...")
+            return None
 
+        validated = await self.validate_links(all_links, url)
         if validated:
             self.logger.debug(f"Success validating year links for url '{url}'...")
         else:
@@ -386,11 +292,12 @@ class YearLinksScraper(BaseScraper):
 
         results = await self.scrape(tasks)
         sites, failed_count = self.process_archive_results(tasks, results)
-        await self.write_results(sites)
+        if failed_count < len(sites):
+            await self.write_results(sites) # TODO don't write if something fucks up
         duration = timedelta(seconds=time.perf_counter() - start_time)
         self.logger.info(f"Finished in {duration}, "
-                         f"validated {self.pages_scraped - len(self.errors)}/{self.pages_scraped} links, "
-                         f"exiting...")
+                         f"success for {self.pages_scraped - len(self.errors)}/{self.pages_scraped} targets, "
+                         f"validated {self.validated_links} links, exiting...")
 
 
 async def main() -> None:

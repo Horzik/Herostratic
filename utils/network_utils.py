@@ -30,6 +30,7 @@ async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:
         for attempt in range(MAX_RETRIES):
+            await asyncio.sleep(random.uniform(0.3, 0.5)) # Add small delay before each request
             wait_time = 3 ** attempt # Incrementally increase the wait time
             try:
                 async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:

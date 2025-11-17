@@ -77,16 +77,14 @@ def extract_article_urls(root: ET.Element):
     urls = []
     url_elements = root.findall(URL_EL)
 
-    # todo: Try deduping same article urls
-    # seen_slugs = {}
-
     for url_elem in url_elements:
         # Get the actual url
         loc = url_elem.find(LOC_EL)
         if loc is not None:
             # Filter the URLs based on keywords
             if any(keyword in loc.text for keyword in URL_KEYWORDS):
-                # todo: Dedupe by article key
+                # todo: Exclude some keywords?
+                # todo: Dedupe by article key...
                 # slug = get_article_key(loc.text)
                 # if slug not in seen_slugs:
                 #     seen_slugs.add(slug)
