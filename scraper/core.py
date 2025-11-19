@@ -2,7 +2,7 @@ import json
 import aiofiles
 
 from pathlib import Path
-from abc import ABC, abstractmethod
+from abc import ABC
 from asyncio import Semaphore, Lock, gather
 
 from utils.logger import LogConfig, init_logging, get_logger
@@ -40,7 +40,6 @@ class BaseScraper(ABC):
         if self._session:
             await self._session.__aexit__(exc_type, exc_val, exc_tb)
 
-    # @abstractmethod
     async def parser(self, url):
         return NotImplementedError
 
@@ -49,8 +48,8 @@ class BaseScraper(ABC):
         """ Runs all jobs of the provided coroutines list. """
         return await gather(*tasks, return_exceptions=True)
 
-    async def fetch(self, url):
-        res = await get_bytes(url, self._session, self._semaphore)
+    async def fetch(self, url: str, gov_site=False):
+        res = await get_bytes(url, self._session, self._semaphore, gov_site)
         return res if res else None
 
     async def write_results(self, processed_results):

@@ -1,5 +1,4 @@
 import random
-
 import aiohttp
 import asyncio
 
@@ -25,18 +24,22 @@ def create_session():
 
 
 # Function to fetch target url and return its bytes
-async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False)-> bytes | None:
+async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False) -> bytes | None:
     logger = get_logger('network')
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:
         for attempt in range(MAX_RETRIES):
             await asyncio.sleep(random.uniform(0.3, 0.5)) # Add small delay before each request
             wait_time = 3 ** attempt # Incrementally increase the wait time
+            # time_start = time.perf_counter()
             try:
                 async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                    # todo read and use the TTFB for congestion control (increase semaphore count OR outgoing requests)
+                    # ttfb = time.perf_counter() - time_start
+                    # logger.debug(f"TTFB ==> {ttfb}")
 
                     if response.status == 200:
-                        # Success, don't log anything, let the caller deal with it
+                        # Don't log anything, let the caller deal with it
                         content_bytes = await response.read()
                         return content_bytes
 
@@ -73,6 +76,7 @@ async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio
                 logger.warning(f"Timeout for '{url}', (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
             except aiohttp.ClientError as e:
                 logger.warning(f"HTTPError for '{url}', (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
+
             # Retry after exception, add a jitter
             if attempt < MAX_RETRIES - 1:
                 jitter = random.uniform(0, wait_time)  # Add randomness

@@ -1,4 +1,4 @@
-from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL, TABLE_SELECTORS, DOMAIN_SELECTORS
+from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL, TABLE_SELECTORS, MUNICIPALITY_SELECTORS
 from utils.logger import LogConfig, init_logging, get_logger
 from utils.network_utils import get_bytes
 from config import LOG_DIR, ERRORS_LOG_FP
@@ -148,13 +148,13 @@ def select_years_table(domain: str, url: str, soup: BeautifulSoup) -> ResultSet[
                 return years_table
 
         # Next try the special cases
-        for municipalities, selector in DOMAIN_SELECTORS.items():
+        for municipalities, selector in MUNICIPALITY_SELECTORS.items():
             muni_list = [municipalities] if isinstance(municipalities, str) else municipalities
             # Check against the possible municipalities
             if any(muni in domain for muni in muni_list):
                 years_table = soup.select(selector)
                 # if not years_table:
-                #     logger.error(f"Table parse failed for url '{url}'")
+                #     logger.error(f"Table parse failed for url '{url}')
                 #     return None
                 return years_table
 

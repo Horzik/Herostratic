@@ -19,7 +19,7 @@ ARCHIVE_SITE_CONFIGS = {
             'article_description': 'div.infobox > p',
             'author': 'p.authorDate',
             'date': 'p.authorDate',
-            'last_page': 'span.stranky a:not(.next)'
+            'last_page': 'span.stranky a:not(.next):last-of-type'
         },
         'article_selectors': {
             'title': 'div#content > h1',
@@ -52,7 +52,7 @@ ARCHIVE_SITE_CONFIGS = {
     }
 }
 
-DOMAIN_SELECTORS = {
+MUNICIPALITY_SELECTORS = {
     'Královéhrad' : 'div#content > table a',
     'Jihomor': 'p:nth-of-type(2) a',
     'Zlínský Kraj': 'table tr td a',

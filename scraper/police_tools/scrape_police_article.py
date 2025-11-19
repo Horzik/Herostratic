@@ -1,13 +1,11 @@
 import asyncio
 import json
 import logging
-import os
 import re
-import tempfile
 import time
 from datetime import timedelta
-import aiofiles
 from bs4 import BeautifulSoup
+
 from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, CZECH_MONTHS, PIG_RANKS, DATE_REGEX, \
     URL_KEYWORDS, ARTICLE_KEYWORDS
 from scraper.site_configs import POLICE_SELECTOR
@@ -185,10 +183,10 @@ async def scraper():
 
     async with create_session() as session:
         article_jobs = [
-                        ((domain, year, url), scrape_article(url, domain, year, session, semaphore, file_lock))
-                        for domain, years_dict in articles_links.items()
-                        for year, urls_list in years_dict.items()
-                        for url in urls_list
+            ((domain, year, url), scrape_article(url, domain, year, session, semaphore, file_lock))
+            for domain, years_dict in articles_links.items()
+            for year, urls_list in years_dict.items()
+            for url in urls_list
         ]
 
         article_results = await asyncio.gather(*[coro for _, coro in article_jobs],

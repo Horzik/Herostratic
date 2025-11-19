@@ -1,6 +1,5 @@
 from config import POLICE_ARTICLES_FP, URL_KEYWORDS, LOG_DIR, ERRORS_LOG_FP, POLICE_ARCHIVES_FP, YEAR_LINKS_FP, \
     FAILED_ARCHIVES_FP
-from scraper.police_tools.archives.get_year_links import scrape_archive
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.io_utils import async_json_read, atomic_json_write, CriticalDataError
 from utils.logger import LogConfig, init_logging, get_logger, destroy
@@ -8,11 +7,17 @@ from utils.network_utils import create_session, get_bytes
 
 from aiohttp import ClientSession
 from datetime import timedelta
-from bs4 import BeautifulSoup, ResultSet, Tag
+from bs4 import BeautifulSoup
 from asyncio import gather, Lock, Semaphore, run
 import logging
 import json
 import time
+
+
+""" 
+    This used to be a combined module, it would first get the 'year_links' from municipality links,
+    which were then used to scrape all article urls for each year_link. Rewritten to OOP in a new module....    
+"""
 
 
 logConfig = LogConfig(
@@ -190,9 +195,9 @@ async def scrape_listings(
     pages_scraped = 0
     max_pages = 0
     metadata: ArticleParseMetadata = (articles, all_articles_count, pages_scraped, max_pages)
+
     try:
         while current_url:
-            # Fetch bytes from url
             page_bytes = await get_bytes(url=current_url, session=session, semaphore=semaphore, gov_site=True)
             if page_bytes is None:
                 logger.error(f"Error: failed fetching '{current_url}', domain: '{domain}' year: '{year}', continuing....")
@@ -200,7 +205,6 @@ async def scrape_listings(
             parsing_result, current_url = parse_articles_listing(current_url, page_bytes, metadata, domain, year)
             metadata: ArticleParseMetadata = parsing_result
 
-        # Write and return the results
         await _read_and_write(domain, articles, year, lock)
         return len(articles), pages_scraped, all_articles_count
 
@@ -217,8 +221,6 @@ async def scrape_listings(
 async def scraper(fp: str = POLICE_ARCHIVES_FP):
     """Main orchestrator, runs archive jobs (to get year links of archives), then the article jobs (to get article urls)."""
 
-    with open(fp, "r") as a:
-        archives: dict = json.load(a)
 
     # Init async and open the session.
     timer_start = time.time()
@@ -226,7 +228,9 @@ async def scraper(fp: str = POLICE_ARCHIVES_FP):
     file_lock = Lock()
     async with create_session() as session:
 
-        # TODO WIP make this a separate scraper
+        # TODO WIP make this a separate scraper, this one is also missing
+        # with open(fp, "r") as a:
+        #     archives: dict = json.load(a)
         # # First we get the "year links" for each archive.
         # archive_jobs = [
         #     (domain, get_year_links(url, domain, session, semaphore)) # Add the domain.
