@@ -16,9 +16,9 @@ import time
 
 """ 
     This used to be a combined module, it would first get the 'year_links' from municipality links,
-    which were then used to scrape all article urls for each year_link. Rewritten to OOP in a new module....    
+    which were then used to scrape all article urls for each year_link. The 'year_links' scraper is 
+    commented out. Rewritten to OOP.    
 """
-
 
 logConfig = LogConfig(
         log_level=logging.DEBUG,

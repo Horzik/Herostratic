@@ -37,10 +37,10 @@ class ListingsParser(BaseScraper):
     INPUT_FILE = YEAR_LINKS_FP
     OUTPUT_FILE = POLICE_ARTICLES_FP
     GOV_SITE = True
-    SEMAPHORE_COUNT = 30
+    SEMAPHORE_COUNT = 10
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
-        log_std_level=logging.DEBUG,
+        log_std_level=logging.INFO,
         log_file_path=LOG_DIR / 'get_police_articles.log',
         log_errors_file_path=ERRORS_LOG_FP
     )
@@ -111,7 +111,7 @@ class ListingsParser(BaseScraper):
             next_url = BASE_POLICE_URL + next_page_link
             metadata.pages_scraped += 1
             self.logger.debug(f"Current url: {url}")
-            self.logger.info(f"Continuing to page {metadata.pages_scraped}/{metadata.max_pages} "
+            self.logger.debug(f"Continuing to page {metadata.pages_scraped}/{metadata.max_pages} "
                              f"in year {year} for: '{municipality}'")
         else:
             self.logger.info(f"No next page found, checked {metadata.all_articles_count} articles")

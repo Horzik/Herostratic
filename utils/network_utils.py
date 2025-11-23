@@ -5,12 +5,18 @@ import asyncio
 from config import MAX_RETRIES, POPO_TIMEOUT, TIMEOUT
 from utils.logger import get_logger
 
+# connector = aiohttp.TCPConnector(
+#         limit=100,
+#         limit_per_host=30,
+#         ttl_dns_cache=500
+#     )
+
 
 # Returns a new ClientSession with default config
 def create_session():
     connector = aiohttp.TCPConnector(
         limit=100,
-        limit_per_host=30,
+        limit_per_host=50,
         ttl_dns_cache=500
     )
     return aiohttp.ClientSession(
@@ -21,6 +27,9 @@ def create_session():
             'Accept': 'application/xml, text/xml, text/html, */*',
         }
     )
+
+# TODO adaptive semaphore or other adaptive rate-limit prevention, leaky bucket
+# todo 'aiolimiter', 'httpx.AsyncClient()'
 
 
 # Function to fetch target url and return its bytes

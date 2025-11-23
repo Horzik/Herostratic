@@ -10,6 +10,12 @@ import logging
 import re
 
 
+""" 
+    This it the original (now obsolete) functional 'year_links' scraper.
+    It worked but with a LOT of mistakes (missing links, failing municipalities etc).
+    It has been rewritten into OOP.
+"""
+
 logConfig = LogConfig(
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
@@ -19,9 +25,7 @@ logConfig = LogConfig(
 init_logging(logConfig)
 logger = get_logger('get_year_links')
 
-
 type YearLinks = dict[str, str | list[str]]
-
 
 def process_year_elements(year_table: ResultSet[Tag], url: str) -> YearLinks:
     """ Process the target 'year link' table for year links """

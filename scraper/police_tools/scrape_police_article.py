@@ -14,6 +14,20 @@ from utils.logger import LogConfig, init_logging, get_logger, destroy
 from utils.network_utils import get_bytes, create_session
 
 
+article_result: dict = {
+    "title": str,
+    "url": str,
+    "year": str,
+    "date": str,
+    "municipality": str,
+    "keywords": str,
+    "author": str,
+    "description": str,
+    "content": str,
+    "has_pictures": bool,
+    "has_documents": bool,
+}
+
 logConfig = LogConfig(
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
@@ -135,22 +149,20 @@ async def scrape_article(url, domain, year, session, semaphore, file_lock):
                 next_element = domain_ref.find_next_sibling('a')
                 domain = next_element.get_text()
 
-        # Add 'id' (probably added in the DB automatically? Or huh)
-        result['title'] = title_ref[0].get_text()
-        result['url'] = url
+        article_result['title'] = title_ref[0].get_text()
+        article_result['url'] = url
         # Add 'scraped_at'
-        result['year'] = year
-        result['date'] = date_text
-        result['municipality'] = domain
-        result['keywords'] = keywords
-        result['author'] = author_text
-        result['description'] = description_ref[0].get_text().strip()
-        result['content'] = content_text
+        article_result['year'] = year
+        article_result['date'] = date_text
+        article_result['municipality'] = domain
+        article_result['keywords'] = keywords
+        article_result['author'] = author_text
+        article_result['description'] = description_ref[0].get_text().strip()
+        article_result['content'] = content_text
         # Get and add thumbnails?
         # Probably change the below to direct FPs and deduce the boolean in DB
-        result['has_pictures'] = has_pictures
-        result['has_documents'] = has_documents
-
+        article_result['has_pictures'] = has_pictures
+        article_result['has_documents'] = has_documents
 
         async with file_lock:
             # Read the existing results
@@ -193,6 +205,7 @@ async def scraper():
          return_exceptions=True
         )
 
+        # todo make a dataclass
         saved_articles = 0
         failed_articles = 0
         articles_processed = 0

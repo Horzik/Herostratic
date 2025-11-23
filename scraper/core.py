@@ -1,9 +1,9 @@
-import json
-import aiofiles
-
+from asyncio import Semaphore, Lock, gather
+from bs4 import BeautifulSoup
 from pathlib import Path
 from abc import ABC
-from asyncio import Semaphore, Lock, gather
+import aiofiles
+import json
 
 from utils.logger import LogConfig, init_logging, get_logger
 from utils.network_utils import create_session, get_bytes
@@ -32,25 +32,39 @@ class BaseScraper(ABC):
         self.pages_scraped = 0
         self.errors = []
 
+
     async def __aenter__(self):
         self._session = await create_session().__aenter__()
         return self
+
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self._session:
             await self._session.__aexit__(exc_type, exc_val, exc_tb)
 
+
     async def parser(self, url):
         return NotImplementedError
+
 
     @staticmethod
     async def scrape(tasks) -> list:
         """ Runs all jobs of the provided coroutines list. """
         return await gather(*tasks, return_exceptions=True)
 
+
+    async def get_soup(self, url) -> BeautifulSoup | None:
+        page_bytes = await self.fetch(url, gov_site=self.GOV_SITE)
+        if page_bytes is None:
+            return None
+        soup = BeautifulSoup(page_bytes, 'lxml')
+        return soup
+
+
     async def fetch(self, url: str, gov_site=False):
         res = await get_bytes(url, self._session, self._semaphore, gov_site)
         return res if res else None
+
 
     async def write_results(self, processed_results):
         """ Writes the passed results into 'OUTPUT_FILE' \n"""
