@@ -1,20 +1,17 @@
-import asyncio
-import json
-import logging
 import re
 import time
+import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TypedDict
 
-from bs4 import BeautifulSoup
-
-from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, PIG_RANKS, DATE_REGEX, \
-    URL_KEYWORDS, ARTICLE_KEYWORDS
 from scraper.core import BaseScraper
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.io_utils import async_json_read, atomic_json_write
 from utils.logger import LogConfig, destroy
+from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, \
+                    PIG_RANKS, DATE_REGEX, URL_KEYWORDS, ARTICLE_KEYWORDS
 
 
 class ArticleResult(TypedDict):
@@ -40,6 +37,9 @@ class ScrapingResults:
     with_pictures: int = 0
     with_documents: int = 0
 
+type Domain = str
+type Year = str
+
 class PoliceArticlesScraper(BaseScraper):
     MODULE_NAME = 'scrape_police_articles'
     BASE_URL = BASE_POLICE_URL
@@ -49,7 +49,7 @@ class PoliceArticlesScraper(BaseScraper):
     SEMAPHORE_COUNT = 10
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
-        log_std_level=logging.DEBUG,
+        log_std_level=logging.INFO,
         log_file_path=LOG_DIR / 'scrape_police_articles.log',
         log_errors_file_path=ERRORS_LOG_FP
     )
@@ -57,6 +57,9 @@ class PoliceArticlesScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.stats = ScrapingResults()
+        self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
+        self.results_buffer_threshold = 50
+
 
     def process_results(self, article_jobs, article_results):
         for job_info, result in zip([job[0] for job in article_jobs], article_results):
@@ -98,7 +101,7 @@ class PoliceArticlesScraper(BaseScraper):
                     self.logger.debug(f"Found multiple dates in '{url}'....")
                 date_text = match.group(0)
         if date_text is None:
-            self.logger.error(f"Failed getting the date from '{url}', '{domain}'::'{year}'")
+            self.logger.debug(f"Failed getting the date from '{url}', '{domain}'::'{year}'")
         return date_text
 
 
@@ -146,15 +149,13 @@ class PoliceArticlesScraper(BaseScraper):
     def get_non_text_elements(title_ref, description_ref, pictures_ref, documents_ref):
         non_text_elements = set()
         if title_ref:
-            non_text_elements.add(title_ref[0])
+            non_text_elements.update(title_ref[0])
         if description_ref:
-            non_text_elements.add(description_ref[0])
-
+            non_text_elements.update(description_ref[0])
         if pictures_ref:
-            non_text_elements.add(pictures_ref)
+            non_text_elements.update(pictures_ref)
         if documents_ref:
-            non_text_elements.add(documents_ref)
-
+            non_text_elements.update(documents_ref)
         return non_text_elements
 
 
@@ -188,6 +189,23 @@ class PoliceArticlesScraper(BaseScraper):
         return p_tags, title_ref, description_ref, content_ref, pictures_ref, documents_ref
 
 
+    async def write_buffer(self):
+        # Write only if we accumulated 30 articles
+        async with self.lock:
+            current_results = await async_json_read(self.OUTPUT_FILE)
+            for domain, year, content in self.results_buffer:
+                if domain not in current_results:
+                    current_results[domain] = {}
+                if year not in current_results[domain]:
+                    current_results[domain][year] = []
+                current_results[domain][year].append(content)
+
+        # Write the results back and clean the buffer
+        atomic_json_write(current_results, self.OUTPUT_FILE)
+        self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
+        return
+
+
     # todo write failed articles?
     async def scrape_article(self,url, domain, year):
         keywords = [key for key in URL_KEYWORDS + ARTICLE_KEYWORDS if key in url]
@@ -205,7 +223,7 @@ class PoliceArticlesScraper(BaseScraper):
             has_pictures = True if pictures_ref else False
             has_documents = True if documents_ref else False
             date_text = self.get_date(content_ref, url, domain, year)
-            author_text = self.get_author(content_ref, )
+            author_text = self.get_author(content_ref)
             year = self.assert_year(year, date_text, soup, url, domain)
 
             # To get content_text, first define elements without the text
@@ -229,20 +247,13 @@ class PoliceArticlesScraper(BaseScraper):
                 'has_documents': has_documents,
             }
 
-            # todo read & write
-            async with self.lock:
-                # Read the existing results
-                data = await async_json_read(POLICE_RESULTS_FP)
-
-                if domain not in data:
-                    data[domain] = {}
-                if year not in data[domain]:
-                    data[domain][year] = []
-                data[domain][year].append(article_result)
-
-                # Write the results
-                # todo write every 30s (or other buffer method)
-                atomic_json_write(data, POLICE_RESULTS_FP)
+            # Append the result to the buffer
+            self.logger.info(f"Got an article from '{url}', '{domain}'/'{year}'")
+            self.results_buffer.append((domain, year, article_result))
+            # If the buffer is large enough ==> write it
+            if len(self.results_buffer) > self.results_buffer_threshold:
+                self.logger.info(f"Writing from a buffer...")
+                await self.write_buffer()
             return article_result
 
         except Exception as e:
@@ -252,40 +263,41 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     async def scraper(self):
-        with open(POLICE_ARTICLES_FP, 'r') as pa:
-            # todo async read
-            articles_links = json.load(pa)
-
         timer_start = time.time()
 
+        articles_links = await async_json_read(self.INPUT_FILE)
         article_jobs = [
-            ((domain, year, url), self.scrape_article(url, domain, year))
+            ((domain, year, url), self.scrape_article(url, domain, year)) # ((metadata), coroutine)
             for domain, years_dict in articles_links.items()
             for year, urls_list in years_dict.items()
             for url in urls_list
         ]
-
         article_results = await asyncio.gather(*[coro for _, coro in article_jobs],
          return_exceptions=True
         )
 
         self.process_results(article_jobs, article_results)
+        await self.write_buffer() # Write the remaining results
+
         timer_end = time.time()
         elapsed_seconds = timer_end - timer_start
         formatted_time = str(timedelta(seconds=elapsed_seconds))
 
         self.logger.info(f"Finished scraping in {formatted_time}")
-        self.logger.info(f"Processed {ScrapingResults.articles_processed} articles, saved {ScrapingResults.saved_articles}, failed {ScrapingResults.failed_articles}")
-        self.logger.info(f"{ScrapingResults.missing_date} missing date, {ScrapingResults.missing_author} missing author, {ScrapingResults.with_pictures} have pictures and {ScrapingResults.with_documents} have documents")
+        self.logger.info(f"Processed {self.stats.articles_processed} articles, saved {self.stats.saved_articles}, "
+                         f"failed {self.stats.failed_articles}")
+        self.logger.info(f"{self.stats.missing_date} missing date, {self.stats.missing_author} missing author,"
+                         f" {self.stats.with_pictures} have pictures and {self.stats.with_documents} have documents")
         self.logger.info(f"Exiting...")
 
 
 async def main():
-    async with PoliceArticlesScraper as ps:
+    async with PoliceArticlesScraper() as ps:
         try:
-            await ps.main()
+            await ps.scraper()
         finally:
             destroy()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
