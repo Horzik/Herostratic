@@ -1,0 +1,161 @@
+import os
+from dataclasses import dataclass
+import asyncio
+import logging
+import time
+
+from aiofiles import open as aiopen
+
+from config import AKTUALNE_SITES_FP, AKTUALNE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, URL_KEYWORDS
+from scraper.core import BaseScraper
+from utils.io_utils import async_json_read, atomic_json_write
+from utils.logger import LogConfig, destroy
+
+
+@dataclass
+class ParsingResults:
+    saved_articles: int = 0
+    articles_processed: int = 0
+    listings_parsed: int = 0
+
+
+class AktualneListingsScraper(BaseScraper):
+    """ WIP => Goes over all available listings from 'aktualne' sites and returns valid article links """
+    MODULE_NAME = 'get_aktualne_articles'
+    BASE_URL = 'https://zpravy.aktualne.cz'
+    INPUT_FILE = AKTUALNE_SITES_FP
+    OUTPUT_FILE = AKTUALNE_ARTICLES_FP
+    SEMAPHORE_COUNT = 10
+    LOG_CONFIG = LogConfig(
+        log_level=logging.DEBUG,
+        log_std_level=logging.DEBUG,
+        log_file_path=LOG_DIR / 'get_aktualne_articles.log',
+        log_errors_file_path=ERRORS_LOG_FP
+    )
+
+    def __init__(self):
+        super().__init__()
+        self.stats = ParsingResults()
+        self.articles_buffer = []
+        self.articles_buffer_threshold = 5
+
+
+    async def write_buffer(self):
+        async with self.lock:
+            async with aiopen(self.OUTPUT_FILE, 'a') as a:
+                for article in self.articles_buffer:
+                    await a.write(article + '\n')
+                self.articles_buffer = [] # Reset the buffer
+
+    # async def get_listing_articles(self, soup):
+    #     container = soup.select_one('div.e-web-aktualne-articles-cards__flex')
+    #     if not container:
+    #         return  # No articles found
+    #
+    #     articles_list = container.select('article')
+    #     for article in articles_list:
+    #         self.logger.debug(f"articles list: {articles_list}")
+    #         article_title = article.get('aria-label')
+    #         if not article_title:
+    #             continue  # Skip if no title found
+    #
+    #         self.logger.info(f"Title found: {article_title}")
+    #         self.stats.articles_processed += 1
+    #         self.logger.debug(f"Found title: {article_title}")
+    #
+    #         if any(keyword in article_title for keyword in URL_KEYWORDS):
+    #             a_tag = article.select_one('h2.e-web-aktualne-articles-card-horizontal__title a')
+    #             article_link = a_tag['href'] if a_tag else None
+    #             if article_link:
+    #                 self.articles_buffer.append(article_link)
+    #                 self.stats.saved_articles += 1
+    #                 self.logger.info(f"Saving article: '{article_title}' → {article_link}")
+
+
+    async def get_listing_articles(self, soup):
+        # self.logger.info(f"Parsing a listing....")
+        # articles_el = soup.select('div.left-column') # Select the main content
+        container = soup.select_one('div.e-web-aktualne-articles-cards__flex')
+        articles_list = container.select('article')
+
+        for article in articles_list:
+            # article_title = element.get('data-ga4-title') # Get the text
+            article_title = article.get('aria-label')
+            # self.logger.debug(f"Found title: {article_title}")
+            self.stats.articles_processed += 1
+            if any(keyword in article_title for keyword in URL_KEYWORDS):
+                # article_link = soup.select_one('h1 > a')['href'] # todo get the actual link
+                a_tag = article.select_one('h2.e-web-aktualne-articles-card-horizontal__title a')
+                article_link = a_tag['href']
+                self.articles_buffer.append(article_link)
+                self.stats.saved_articles += 1
+                self.logger.info(f"Saving an article with title: '{article_title}'...link: '{article_link}'...")
+
+
+    async def get_next_page(self, soup):
+        # The button html kept changing? idk, here are the old ones
+        # NEXT_PAGE_BUTTON = [
+        #     'a.listing-nav__btn listing-nav__btn--right',
+        #     'a.more-btn']
+        butt = soup.select_one('a[aria-label="next"]')
+        if not butt:
+            self.logger.info(f"No next page found...")
+            return None
+
+        next_href = butt.get('href')
+        if not next_href:
+            self.logger.error(f"Found the next page button but didn't get the href, exiting...")
+            return None
+
+        self.stats.listings_parsed += 1
+        self.logger.debug(f"Parsed {self.stats.listings_parsed} pages, going to the next page...")
+        return self.BASE_URL + next_href
+
+
+    async def parse_archive(self, url) -> bool | None:
+        new_url = url
+        while new_url:
+            soup = await self.get_soup(new_url)
+            if not soup:
+                self.logger.error(f"Couldn't get content from '{url}', returning None...")
+                return None
+
+            await self.get_listing_articles(soup)
+            # Write the buffer when we reach the threshold, this smells being here
+            if len(self.articles_buffer) > self.articles_buffer_threshold:
+                await self.write_buffer()
+            new_url = await self.get_next_page(soup)
+
+        return True
+
+
+    async def mk_tasks(self):
+        with open(self.INPUT_FILE, 'r') as f:
+            return [self.parse_archive(url) for url in f]
+
+
+    async def run(self):
+        timer_start = time.perf_counter()
+        self.logger.info(f"Starting the aktualne scraper...")
+
+        archive_jobs = await self.mk_tasks()
+        await self.scrape(archive_jobs) # todo process results? Prob not
+        await self.write_buffer()
+        timer_end = time.perf_counter()
+
+        self.logger.info(f"Finished parsing {len(archive_jobs)} links in {timer_end - timer_start} seconds")
+        self.logger.info(f"Parsed {self.stats.listings_parsed} listing pages, found total {self.stats.articles_processed} articles, "
+                         f"saved {self.stats.saved_articles} articles. Exiting....")
+
+
+async def main():
+    async with AktualneListingsScraper() as als:
+        try:
+            await als.run()
+        finally:
+            destroy()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+

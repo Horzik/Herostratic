@@ -28,7 +28,7 @@ class ArticleResult(TypedDict):
     has_documents: bool
 
 @dataclass
-class ScrapingResults:
+class ScrapingStats:
     saved_articles: int = 0
     failed_articles: int = 0
     articles_processed: int = 0
@@ -56,7 +56,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     def __init__(self):
         super().__init__()
-        self.stats = ScrapingResults()
+        self.stats = ScrapingStats()
         self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
         self.results_buffer_threshold = 50
 

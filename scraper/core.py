@@ -10,7 +10,8 @@ from utils.network_utils import create_session, get_bytes
 
 
 class BaseScraper(ABC):
-    """ Base class for async scrapers. Handles session/semaphore. \n
+    """ Base class for async scrapers. Enters with a session ==> run as context manager. \n
+        Provides lock/logger,  \n
         Open and run the children as context managers.
     """
     MODULE_NAME: str = None
@@ -20,6 +21,7 @@ class BaseScraper(ABC):
     SEMAPHORE_COUNT: int = None
     GOV_SITE: bool = False
     LOG_CONFIG: LogConfig = None
+
 
     def __init__(self):
         init_logging(self.LOG_CONFIG)
@@ -53,7 +55,7 @@ class BaseScraper(ABC):
         return await gather(*tasks, return_exceptions=True)
 
 
-    async def get_soup(self, url) -> BeautifulSoup | None:
+    async def get_soup(self, url: str) -> BeautifulSoup | None:
         page_bytes = await self.fetch(url, gov_site=self.GOV_SITE)
         if page_bytes is None:
             return None
@@ -68,6 +70,7 @@ class BaseScraper(ABC):
 
     async def write_results(self, processed_results):
         """ Writes the passed results into 'OUTPUT_FILE' \n"""
+        # todo do some exception checks? (OSError, PermissionError...)
         async with self.lock:
             async with aiofiles.open(self.OUTPUT_FILE, "w", encoding='utf-8') as p:
                 await p.write(json.dumps(processed_results, indent=2, ensure_ascii=False))

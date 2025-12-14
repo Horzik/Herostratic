@@ -13,8 +13,7 @@ from scraper.site_configs import BASE_POLICE_URL
 from config import POLICE_ARCHIVES_FP, YEAR_LINKS_FP, LOG_DIR, ERRORS_LOG_FP
 
 
-# TODO self.errors is not being used
-# TODO validation is not ideal, one failed link will fail the whole municipality
+# TODO validation is 'all or nothing' => one failed link will fail the whole municipality
 # TODO try making the logging somewhat better
 class YearLinksScraper(BaseScraper):
     MODULE_NAME = "year_links"

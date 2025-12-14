@@ -17,6 +17,7 @@ ERRORS_LOG_FP = LOG_DIR / "errors.log"
 # Scrape Input
 SITES_FP = INPUT_DIR / "sites.txt"
 POLICE_SITES_FP = INPUT_DIR / "police_sites.txt"
+FAILED_ARCHIVES_FP = INPUT_DIR / "failed_archives.json"
 
 # Scrape Output
 SITEMAPS_FP = OUTPUT_DIR / "sitemaps.json"
@@ -24,16 +25,22 @@ NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
 ARTICLES_FP = OUTPUT_DIR / "articles3.json"
 HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
+
+# TODO move to "site_configs" ?
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
 YEAR_LINKS_FP = OUTPUT_DIR / "year_links1.json"
 JIHOMOR_LINKS_FP = OUTPUT_DIR / "jihomor_links.json"
-FAILED_ARCHIVES_FP = INPUT_DIR / "failed_archives.json"
+AKTUALNE_ARTICLES_FP = OUTPUT_DIR / "aktualne_articles.json"
+AKT_ART_FP = OUTPUT_DIR / "aktualne.txt"
+
+# Site-specific FPs
+AKTUALNE_SITES_FP = INPUT_DIR / "aktualne_sites.txt"
 
 # Parsing and scraping filters and keywords
-EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika'] # TODO USE?????
-URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer', 'cmaral', ]
+EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika'] # TODO USE?!
+URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer', 'cmaral', 'mural', 'street art', 'street-art' ] # todo rename this (also used for article parsing)
 EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis'] # TODO also use????
 ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
 DECODE_FORMATS = ['utf-8', 'windows-1250', 'iso-8859-2']

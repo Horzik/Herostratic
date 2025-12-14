@@ -1,3 +1,4 @@
+# TODO COMMENT AND ARCHIVE THIS MODULE
 import asyncio
 import json
 import logging
@@ -6,12 +7,12 @@ import time
 from datetime import timedelta
 from bs4 import BeautifulSoup
 
-from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, CZECH_MONTHS, PIG_RANKS, DATE_REGEX, \
-    URL_KEYWORDS, ARTICLE_KEYWORDS
 from scraper.site_configs import POLICE_SELECTOR
 from utils.io_utils import async_json_read, atomic_json_write
 from utils.logger import LogConfig, init_logging, get_logger, destroy
 from utils.network_utils import get_bytes, create_session
+from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, \
+                   URL_KEYWORDS, ARTICLE_KEYWORDS,  PIG_RANKS, DATE_REGEX
 
 
 article_result: dict = {

@@ -12,10 +12,15 @@ from scraper.site_configs import BASE_POLICE_URL, POLICE_ARCHIVE_SELECTORS
 from utils.logger import LogConfig, destroy
 
 
-# todo 1 ==> verify we are getting the correct links
-# todo 2 ==> print/log all processed archives and the failed ones (or something)
+# TODO !!! => make a module that goes to BASE_URL and gets the POLICE_SITES
+""" 
+    Checks the input municipalities 'homepages' and returns their corresponding archive pages
+    This is the first refactored module, maybe not best practices, revisit...
+"""
+# todo 2 ==> verify we get the correct links (can we?)
+# todo 3 ==> log all processed and failed archives
 class ScrapeArchive(BaseScraper):
-    MODULE_NAME = 'poop_archives'
+    MODULE_NAME = 'police_archives'
     BASE_URL = BASE_POLICE_URL
     INPUT_FILE = POLICE_SITES_FP
     OUTPUT_FILE = POLICE_ARCHIVES_FP
@@ -23,28 +28,33 @@ class ScrapeArchive(BaseScraper):
     SEMAPHORE_COUNT = 30
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
-        log_file_path=LOG_DIR / 'oop_archives.log',
+        log_file_path=LOG_DIR / 'police_archives.log',
         log_errors_file_path=ERRORS_LOG_FP
     )
+
 
     @staticmethod
     def get_municipality_name(municipality_element) -> str:
         if municipality_element:
-            municipality = municipality_element['alt'].strip(' název')
-            if municipality == "Název kraj":
-                municipality = "Olomoucký kraj"
-            if municipality == "Krajské ředitelství policie kraje Vysočina":
-                municipality = "Kraj Vysočina"
-            if municipality == "Krajské ředitelství Zlk":
-                municipality = "Zlínský Kraj"
-            if municipality == "Krajské ředitelství policie Lbk":
-                municipality = "Liberecký Kraj"
+            muni_name = municipality_element['alt'].strip(' název')
+            # Overwrite names of some of the municipalities
+            if muni_name == "Název kraj":
+                muni_name = "Olomoucký kraj"
+            if muni_name == "Krajské ředitelství policie kraje Vysočina":
+                muni_name = "Kraj Vysočina"
+            if muni_name == "Krajské ředitelství Zlk":
+                muni_name = "Zlínský Kraj"
+            if muni_name == "Krajské ředitelství policie Lbk":
+                muni_name = "Liberecký Kraj"
         else:
-            municipality = "Informační servis"
-        return municipality.strip(" -")
+            muni_name = "Informační servis"
+        return muni_name.strip(" -")
+
 
     async def validate_link(self, link):
-        # todo this is not a great validation, not sure what would be the best (if anything)
+        """ Checks if the link page has a 'pager' element, if not -> validated. \n
+            Not sure what (if any) better way to validate lol.
+        """
         content = await self.fetch(link)
         if content is None:
             self.logger.error(f"Error while validating, content not found for: '{link}'")
@@ -62,6 +72,7 @@ class ScrapeArchive(BaseScraper):
             self.logger.debug(f"Validated link: '{link}'")
             self.pages_scraped += 1
             return True
+
 
     async def parser(self, url):
         self.logger.info(f"Parsing link: '{url}'...")
@@ -90,6 +101,7 @@ class ScrapeArchive(BaseScraper):
 
         return None
 
+
     async def process_results(self, results):
         archive_dict = {}
         for i, result in enumerate(results):
@@ -102,10 +114,12 @@ class ScrapeArchive(BaseScraper):
             archive_dict.setdefault(municipality, []).append(archive_link)
         return archive_dict
 
+
     def prepare_tasks(self, data_fp) -> list:
         # Return a list of coroutines
         with open(data_fp, 'r') as f:
             return [self.scrape_archive(line.strip()) for line in f]
+
 
     async def scrape_archive(self, url: str):
         await asyncio.sleep(random.uniform(0.1, 0.5)) # Play nice, it is the police after all
@@ -116,6 +130,7 @@ class ScrapeArchive(BaseScraper):
             self.logger.exception(f"Error reading {url}::{e}")
         self.logger.warning(f"Couldn't find the archive for {url}")
         return None
+
 
     async def run(self):
         start_time = time.perf_counter()
@@ -128,6 +143,7 @@ class ScrapeArchive(BaseScraper):
 
         duration = timedelta(seconds=time.perf_counter() - start_time)
         self.logger.info(f"Finished in {duration}, validated {self.pages_scraped - len(self.errors)}/{self.pages_scraped} links, exiting...")
+
 
 async def main():
     async with ScrapeArchive() as scr:

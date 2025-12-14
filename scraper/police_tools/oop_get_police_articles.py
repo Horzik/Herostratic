@@ -162,11 +162,11 @@ class ListingsParser(BaseScraper):
     ):
         """ Scrape the municipality for article links, write its results."""
         metadata = ListingScrapeMetadata()
-        current_url = url
+        new_url = url
         try:
-            while current_url:
-                page_bytes = await self.fetch(url=current_url, gov_site=True)
-                current_url = self.parse_listing(current_url, page_bytes, metadata, municipality, year)
+            while new_url:
+                page_bytes = await self.fetch(url=new_url, gov_site=True)
+                new_url = self.parse_listing(new_url, page_bytes, metadata, municipality, year)
 
             if len(metadata.articles) > 0:
                 await self._read_and_write(municipality, metadata.articles, year)
@@ -175,7 +175,7 @@ class ListingsParser(BaseScraper):
         except CriticalDataError: # Re-raise writing error
             raise
         except Exception as e: # Catch any generic error
-            self.logger.error(f" {municipality}/{year} FAILED for '{current_url}'...Error ===>")
+            self.logger.error(f" {municipality}/{year} FAILED for '{new_url}'...Error ===>")
             self.logger.exception(e)
         return None
 
