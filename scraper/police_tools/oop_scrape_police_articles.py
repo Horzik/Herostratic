@@ -201,7 +201,7 @@ class PoliceArticlesScraper(BaseScraper):
                 current_results[domain][year].append(content)
 
         # Write the results back and clean the buffer
-        atomic_json_write(current_results, self.OUTPUT_FILE)
+        atomic_json_write(current_results, self.OUTPUT_FILE) # todo do this inside the lock??
         self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
         return
 

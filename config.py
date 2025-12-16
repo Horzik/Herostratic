@@ -32,11 +32,11 @@ POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
 YEAR_LINKS_FP = OUTPUT_DIR / "year_links1.json"
 JIHOMOR_LINKS_FP = OUTPUT_DIR / "jihomor_links.json"
-AKTUALNE_ARTICLES_FP = OUTPUT_DIR / "aktualne_articles.json"
-AKT_ART_FP = OUTPUT_DIR / "aktualne.txt"
 
 # Site-specific FPs
 AKTUALNE_SITES_FP = INPUT_DIR / "aktualne_sites.txt"
+AKT_ART_FP = OUTPUT_DIR / "aktualne.txt"
+AKT_RESULTS_FP = OUTPUT_DIR / "aktualne_results.json"
 
 # Parsing and scraping filters and keywords
 EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika'] # TODO USE?!

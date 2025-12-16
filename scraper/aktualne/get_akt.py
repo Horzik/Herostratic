@@ -1,4 +1,4 @@
-import os
+from asyncio.tasks import gather
 from dataclasses import dataclass
 import asyncio
 import logging
@@ -7,14 +7,22 @@ import time
 from aiofiles import open as aiopen
 from bs4 import BeautifulSoup
 
-from config import AKTUALNE_SITES_FP, AKTUALNE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, URL_KEYWORDS, AKT_ART_FP
+from config import AKTUALNE_SITES_FP, LOG_DIR, ERRORS_LOG_FP, URL_KEYWORDS, AKT_ART_FP
 from scraper.core import BaseScraper
-from utils.io_utils import async_json_read, atomic_json_write
 from utils.logger import LogConfig, destroy
 
 
+"""
+    This module is an attempt to rewrite the original to make the async more pronounced, however
+    it seems to have been proven otherwise (original seems to be about 3 times faster.
+    The concept is nice and should work in theory, but whole bunch of changes
+    would need to be done to make it work correctly. 
+    
+    --> Use "get_aktualne_articles.py"
+"""
+
 @dataclass
-class ParsingResults:
+class ArtResults:
     saved_articles: int = 0
     articles_processed: int = 0
     listings_parsed: int = 0
@@ -22,23 +30,25 @@ class ParsingResults:
 
 class AktualneListingsScraper(BaseScraper):
     """ WIP => Goes over all available listings from 'aktualne' sites and returns valid article links """
-    MODULE_NAME = 'get_aktualne_articles'
+    MODULE_NAME = 'aktualne_listings'
     BASE_URL = 'https://zpravy.aktualne.cz'
     INPUT_FILE = AKTUALNE_SITES_FP
     OUTPUT_FILE = AKT_ART_FP
-    SEMAPHORE_COUNT = 50
+    SEMAPHORE_COUNT = 20
+    # GOV_SITE = True # aktualne is harsh
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
-        log_file_path=LOG_DIR / 'get_aktualne_articles.log',
+        log_file_path=LOG_DIR / 'aktualne_listings.log',
         log_errors_file_path=ERRORS_LOG_FP
     )
 
     def __init__(self):
         super().__init__()
-        self.stats = ParsingResults()
+        self.stats = ArtResults()
         self.articles_buffer = []
         self.articles_buffer_threshold = 5
+        self.all_tasks_len = 0
 
 
     async def write_buffer(self):
@@ -46,35 +56,41 @@ class AktualneListingsScraper(BaseScraper):
             async with aiopen(self.OUTPUT_FILE, 'a') as a:
                 for article in self.articles_buffer:
                     await a.write(article + '\n')
-                self.logger.info(f"Written the buffered archives to '.../{self.OUTPUT_FILE}'")
+                self.logger.info(f"Written the buffered links to '.../{self.OUTPUT_FILE}',"
+                                 f" saved total {self.stats.saved_articles} articles")
                 self.articles_buffer = [] # Reset the buffer
 
-    async def get_listing_articles(self, url):
-        # todo double check we do this right (and appending to the buffer)
+
+    async def save_article(self, article, article_title):
+        a_tag = article.select_one('h2.e-web-aktualne-articles-card-horizontal__title a')
+        article_link = a_tag['href']
+        self.articles_buffer.append(article_link)
+        self.logger.info(f"Saving article with title: '{article_title}'...link: '{article_link}'...")
+        self.stats.saved_articles += 1
         if len(self.articles_buffer) >= self.articles_buffer_threshold:
             await self.write_buffer()
 
-        # self.logger.info(f"Parsing a listing....")
-        # articles_el = soup.select('div.left-column') # Select the main content
+
+
+    async def get_listing_articles(self, url):
+        # We stop the whole scraper if this fails
         soup = await self.get_soup(url)
         container = soup.select_one('div.e-web-aktualne-articles-cards__flex')
         articles_list = container.select('article')
 
-        if self.stats.articles_processed // 100:
-            self.logger.debug(f"Processed {self.stats.articles_processed} articles....")
-
         for article in articles_list:
-            # article_title = element.get('data-ga4-title') # Get the text
-            article_title = article.get('aria-label')
-            # self.logger.debug(f"Found title: {article_title}")
             self.stats.articles_processed += 1
+            if self.stats.articles_processed % 500 == 0: # Log progress every 500 articles
+                self.logger.debug(f"Processed {self.stats.articles_processed} articles....")
+
+            article_title = article.get('aria-label')
             if any(keyword in article_title for keyword in URL_KEYWORDS):
-                # article_link = soup.select_one('h1 > a')['href'] # todo get the actual link
-                a_tag = article.select_one('h2.e-web-aktualne-articles-card-horizontal__title a')
-                article_link = a_tag['href']
-                self.articles_buffer.append(article_link)
-                self.stats.saved_articles += 1
-                self.logger.info(f"Saving an article with title: '{article_title}'...link: '{article_link}'...")
+                await self.save_article(article, article_title)
+
+        self.stats.listings_parsed += 1
+        if self.stats.listings_parsed % 100 == 0: # Log progress every 100 parsed listings
+            progress = self.stats.listings_parsed / self.all_tasks_len * 100 # Percentage
+            self.logger.info(f"Parsed {progress:.1f}% of all tasks....")
 
 
     async def get_next_page(self, soup):
@@ -88,8 +104,6 @@ class AktualneListingsScraper(BaseScraper):
             self.logger.error(f"Found the next page button but didn't get the href, exiting...")
             return None
 
-        self.stats.listings_parsed += 1
-        # self.logger.debug(f"Parsed {self.stats.listings_parsed} pages, going to the next page...")
         return self.BASE_URL + next_href
 
 
@@ -102,10 +116,15 @@ class AktualneListingsScraper(BaseScraper):
 
 
     async def get_max_page(self, url=BASE_URL) -> int | None:
-        # todo separate this or run concurrently
-        loop_count = 0
+        # todo write the resulted max_pages programmatically instead of hardcoding like this
+        if url == 'https://zpravy.aktualne.cz/':
+            return 13353
+        if url == 'https://zpravy.aktualne.cz/domaci/':
+            return 3803
+
         left = 1
-        right = 14000
+        right = 14000 # Approximate ceiling
+        loop_count = 0
         while left <= right:
             loop_count += 1
             mid = (left + right) // 2
@@ -114,26 +133,22 @@ class AktualneListingsScraper(BaseScraper):
             soup = await self.get_soup(test_url)
             if self.assert_listing(soup):
                 next_page = await self.get_next_page(soup)
-                if next_page:
-                    # Too low
+                if next_page: # Too low
                     left = mid + 1
                     self.logger.info(f"Continuing to the loop number {loop_count + 1}, current max page is {mid}....")
                     continue
-                else:
-                    # On target
+                else: # On target
                     self.logger.info(f"Found the final page: {mid}")
                     return mid
-            if soup:
-                # Too high
+            if soup: # Too high
                 right = mid - 1
-                self.logger.info(f"Contiunuing to the loop number {loop_count + 1}, current max page is {mid}...")
+                self.logger.info(f"Continuing to the loop number {loop_count + 1}, current max page is {mid}...")
                 continue
         self.logger.error(f"Failed to find the final page, {loop_count} loops...")
         return None
 
 
     async def get_all_listings(self) -> dict[str, list]:
-        # todo run this async (possibly prefetch as well)
         all_urls = {}
         input_urls = []
         with open(self.INPUT_FILE, 'r') as f:
@@ -164,7 +179,9 @@ class AktualneListingsScraper(BaseScraper):
         self.logger.info(f"Starting the aktualne scraper...")
 
         archive_jobs = await self.mk_tasks()
-        await self.scrape(archive_jobs) # todo process results? Prob not
+        self.all_tasks_len = len(archive_jobs) # Set the amount of tasks
+
+        await gather(*archive_jobs, return_exceptions=True) # Not processing results because we do that in each task
         await self.write_buffer()
         timer_end = time.perf_counter()
 

@@ -51,6 +51,7 @@ class BaseScraper(ABC):
 
     @staticmethod
     async def scrape(tasks) -> list:
+        # todo remove
         """ Runs all jobs of the provided coroutines list. """
         return await gather(*tasks, return_exceptions=True)
 

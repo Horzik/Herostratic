@@ -27,6 +27,7 @@ class CriticalDataError(Exception):
 
 
 async def async_json_read(fp: str) -> dict:
+    # todo this only seems to act as a dict reader, rename or idk
     """
         Helper to read json asynchronously \n
         Return the result OR return an empty dict
@@ -39,13 +40,13 @@ async def async_json_read(fp: str) -> dict:
             data = await loop.run_in_executor(None, json.loads, content)
     # If no file, start with empty object
     except (json.JSONDecodeError, FileNotFoundError):
-        logger.info("Failed to open POLICE_ARTICLES_FP, creating empty dict...")
+        logger.info(f"Failed to open {fp}, creating empty dict...")
         data = {}
 
     return data
 
 
-def atomic_json_write(data: dict, fp: str):
+def atomic_json_write(data: dict | list, fp: str):
     """
         Helper to write json 'atomically': first writes to a tmp file \n
         and only then to the target file (cleans up the tmp file afterward)

@@ -47,6 +47,7 @@ async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio
                     # ttfb = time.perf_counter() - time_start
                     # logger.debug(f"TTFB ==> {ttfb}")
 
+                    # todo make all the response handling a separate function?
                     if response.status == 200:
                         # Don't log anything, let the caller deal with it
                         content_bytes = await response.read()
@@ -64,7 +65,12 @@ async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio
                             return None
 
                     # Retry-able errors
-                    elif response.status in [500, 502, 503, 504]:
+                    elif response.status == 500:
+                        logger.warning(f"HTTP 500 for '{url}', attempt {attempt + 1}/{MAX_RETRIES}, sleeping for extra long...")
+                        await asyncio.sleep(wait_time + 30)
+                        continue
+
+                    elif response.status in [502, 503, 504]:
                         logger.warning(f"HTTP {response.status} for '{url}', attempt {attempt + 1}/{MAX_RETRIES}")
                         if attempt < MAX_RETRIES - 1:
                             jitter = random.uniform(0, wait_time)  # Add randomness
@@ -87,6 +93,7 @@ async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio
                 logger.warning(f"HTTPError for '{url}', (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
 
             # Retry after exception, add a jitter
+            # todo make this into a separate block?
             if attempt < MAX_RETRIES - 1:
                 jitter = random.uniform(0, wait_time)  # Add randomness
                 logger.warning(f"Retrying after {wait_time + jitter:.1f}s...")
