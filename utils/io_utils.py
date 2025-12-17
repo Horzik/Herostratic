@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import tempfile
+from pathlib import Path
+
 import aiofiles
 
 from config import LOG_DIR, ERRORS_LOG_FP, DECODE_FORMATS, INPUT_DIR
@@ -46,11 +48,11 @@ async def async_json_read(fp: str) -> dict:
     return data
 
 
-def atomic_json_write(data: dict | list, fp: str):
+def atomic_json_write(data: dict | list, fp: str | Path):
+    # todo add file creation if not existing?
     """
         Helper to write json 'atomically': first writes to a tmp file \n
         and only then to the target file (cleans up the tmp file afterward)
-
     """
     try:
         tmp_name = None

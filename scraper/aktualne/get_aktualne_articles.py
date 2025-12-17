@@ -6,9 +6,8 @@ import time
 
 from aiofiles import open as aiopen
 
-from config import AKTUALNE_SITES_FP, AKTUALNE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, URL_KEYWORDS
+from config import AKTUALNE_SITES_FP, LOG_DIR, ERRORS_LOG_FP, URL_KEYWORDS, AKT_ART_FP
 from scraper.core import BaseScraper
-from utils.io_utils import async_json_read, atomic_json_write
 from utils.logger import LogConfig, destroy
 
 
@@ -24,7 +23,7 @@ class AktualneListingsScraper(BaseScraper):
     MODULE_NAME = 'get_aktualne_articles'
     BASE_URL = 'https://zpravy.aktualne.cz'
     INPUT_FILE = AKTUALNE_SITES_FP
-    OUTPUT_FILE = AKTUALNE_ARTICLES_FP
+    OUTPUT_FILE = AKT_ART_FP
     SEMAPHORE_COUNT = 10
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
@@ -40,36 +39,17 @@ class AktualneListingsScraper(BaseScraper):
         self.articles_buffer_threshold = 5
 
 
-    async def write_buffer(self):
+    def clear_buffer(self):
+        self.articles_buffer.clear()
+        return
+
+
+    async def flush_buffer(self):
         async with self.lock:
             async with aiopen(self.OUTPUT_FILE, 'a') as a:
                 for article in self.articles_buffer:
                     await a.write(article + '\n')
-                self.articles_buffer = [] # Reset the buffer
-
-    # async def get_listing_articles(self, soup):
-    #     container = soup.select_one('div.e-web-aktualne-articles-cards__flex')
-    #     if not container:
-    #         return  # No articles found
-    #
-    #     articles_list = container.select('article')
-    #     for article in articles_list:
-    #         self.logger.debug(f"articles list: {articles_list}")
-    #         article_title = article.get('aria-label')
-    #         if not article_title:
-    #             continue  # Skip if no title found
-    #
-    #         self.logger.info(f"Title found: {article_title}")
-    #         self.stats.articles_processed += 1
-    #         self.logger.debug(f"Found title: {article_title}")
-    #
-    #         if any(keyword in article_title for keyword in URL_KEYWORDS):
-    #             a_tag = article.select_one('h2.e-web-aktualne-articles-card-horizontal__title a')
-    #             article_link = a_tag['href'] if a_tag else None
-    #             if article_link:
-    #                 self.articles_buffer.append(article_link)
-    #                 self.stats.saved_articles += 1
-    #                 self.logger.info(f"Saving article: '{article_title}' → {article_link}")
+                self.clear_buffer()
 
 
     async def get_listing_articles(self, soup):
@@ -93,10 +73,6 @@ class AktualneListingsScraper(BaseScraper):
 
 
     async def get_next_page(self, soup):
-        # The button html kept changing? idk, here are the old ones
-        # NEXT_PAGE_BUTTON = [
-        #     'a.listing-nav__btn listing-nav__btn--right',
-        #     'a.more-btn']
         butt = soup.select_one('a[aria-label="next"]')
         if not butt:
             self.logger.info(f"No next page found...")
@@ -123,7 +99,7 @@ class AktualneListingsScraper(BaseScraper):
             await self.get_listing_articles(soup)
             # Write the buffer when we reach the threshold, this smells being here
             if len(self.articles_buffer) > self.articles_buffer_threshold:
-                await self.write_buffer()
+                await self.flush_buffer()
             new_url = await self.get_next_page(soup)
 
         return True
@@ -139,8 +115,8 @@ class AktualneListingsScraper(BaseScraper):
         self.logger.info(f"Starting the aktualne scraper...")
 
         archive_jobs = await self.mk_tasks()
-        await self.scrape(archive_jobs) # todo process results? Prob not
-        await self.write_buffer()
+        await self.scrape(archive_jobs) # todo process results?
+        await self.flush_buffer()
         timer_end = time.perf_counter()
 
         self.logger.info(f"Finished parsing {len(archive_jobs)} links in {timer_end - timer_start} seconds")

@@ -25,27 +25,34 @@ NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
 ARTICLES_FP = OUTPUT_DIR / "articles3.json"
 HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
+DISTRICTS_FP = OUTPUT_DIR / "districts.txt"
 
-# TODO move to "site_configs" ?
+
+# Site FPs
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
 YEAR_LINKS_FP = OUTPUT_DIR / "year_links1.json"
 JIHOMOR_LINKS_FP = OUTPUT_DIR / "jihomor_links.json"
 
-# Site-specific FPs
 AKTUALNE_SITES_FP = INPUT_DIR / "aktualne_sites.txt"
 AKT_ART_FP = OUTPUT_DIR / "aktualne.txt"
 AKT_RESULTS_FP = OUTPUT_DIR / "aktualne_results.json"
 
+METRO_SITE_FP = INPUT_DIR / "metro_site.txt"
+METRO_PATHS_FP = OUTPUT_DIR / "metro_paths.txt"
+METRO_ARTICLES_FP = OUTPUT_DIR / "metro_articles.json"
+METRO_RESULTS_FP = OUTPUT_DIR / "metro_results.json"
+
+
 # Parsing and scraping filters and keywords
-EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika'] # TODO USE?!
-URL_KEYWORDS = ['graffiti', 'vandal', 'sprejer', 'cmaral', 'mural', 'street art', 'street-art' ] # todo rename this (also used for article parsing)
-EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis'] # TODO also use????
+URL_KEYWORDS = ['spray', 'sprey', 'sprej', 'graffiti', 'vandal', 'cmaral', 'mural', 'street art', 'street-art'] # todo rename this (also used for article parsing)
 ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
 DECODE_FORMATS = ['utf-8', 'windows-1250', 'iso-8859-2']
 EXCLUDE_ARCHIVE_KEYWORDS = ['nehody', 'násil', 'nasil']
 EXCLUDE_SOCIAL_KEYWORDS = ['mailto:','twitter.com/share', 'facebook.com/sharer', 'q=cHJuPTE%3d']
+# EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']
+# EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis']
 
 # Sitemap constants
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
@@ -58,15 +65,12 @@ SITEMAP_INDEX_EL = f".//{SITEMAP_NS}loc"
 MAX_RETRIES = 3
 TIMEOUT = 10
 POPO_TIMEOUT = 40
-
+PIG_RANKS = ['nprap.', 'plk.', 'por.', 'prap.', 'kpt.', 'mjr.', 'pprap.', 'npor.']
 CZECH_MONTHS = [
         'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince',
         'leden','únor','březen','duben','květen','červen',
-        'červenec', 'srpen', 'září',  'říjen', 'listopad', 'prosinec'
-]
-
-PIG_RANKS = ['nprap.', 'plk.', 'por.', 'prap.', 'kpt.', 'mjr.', 'pprap.', 'npor.']
+        'červenec', 'srpen', 'září',  'říjen', 'listopad', 'prosinec']
 
 # Regex for getting the date from article content
 months_pattern = '|'.join(CZECH_MONTHS)

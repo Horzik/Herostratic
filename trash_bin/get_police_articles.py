@@ -14,12 +14,6 @@ import json
 import time
 
 
-""" 
-    This used to be a combined module, it would first get the 'year_links' from municipality links,
-    which were then used to scrape all article urls for each year_link. The 'year_links' scraper is 
-    commented out. Rewritten to OOP.    
-"""
-
 logConfig = LogConfig(
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
@@ -32,6 +26,14 @@ logger = get_logger('get_popo_articles')
 type ArticleParseMetadata = tuple[list[str], int, int, int]
 type ArticleResultsMetadata = tuple[int, int, int, int]
 type ArchiveResultsMetadata = tuple[dict[str, dict[int, str]], int]
+
+
+""" 
+    This used to be a combined module, it would first get the 'year_links' from municipality links,
+    which were then used to scrape all article urls for each year_link. The 'year_links' scraper is 
+    commented out. Both rewritten to OOP.    
+"""
+
 
 async def _read_and_write(
     domain: str,
@@ -219,8 +221,8 @@ async def scrape_listings(
 
 
 async def scraper(fp: str = POLICE_ARCHIVES_FP):
+    # TODO We just feed the archives directly during construction
     """Main orchestrator, runs archive jobs (to get year links of archives), then the article jobs (to get article urls)."""
-
 
     # Init async and open the session.
     timer_start = time.time()
@@ -252,7 +254,6 @@ async def scraper(fp: str = POLICE_ARCHIVES_FP):
         #     # logger.error(f"CONTINUING ANYWAYS")
         #     return None
 
-        # TODO We just feed the archives directly here for now
         with open(FAILED_ARCHIVES_FP, 'r') as f:
             arch_sites = json.load(f)
 

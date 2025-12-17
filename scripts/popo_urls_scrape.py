@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from config import LOG_DIR, ERRORS_LOG_FP
-from scraper.police_tools.get_police_articles import get_police_articles
+from trash_bin.get_police_articles import get_police_articles
 from utils.logger import init_logging, get_logger, LogConfig
 from utils.network_utils import create_session
 

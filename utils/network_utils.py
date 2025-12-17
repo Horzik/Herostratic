@@ -33,7 +33,7 @@ def create_session():
 
 
 # Function to fetch target url and return its bytes
-async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False) -> bytes | None:
+async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False, verify=True) -> bytes | None:
     logger = get_logger('network')
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:
@@ -42,7 +42,7 @@ async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio
             wait_time = 3 ** attempt # Incrementally increase the wait time
             # time_start = time.perf_counter()
             try:
-                async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout), verify_ssl=verify) as response:
                     # todo read and use the TTFB for congestion control (increase semaphore count OR outgoing requests)
                     # ttfb = time.perf_counter() - time_start
                     # logger.debug(f"TTFB ==> {ttfb}")
@@ -103,4 +103,4 @@ async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio
                 return None
 
         # Return so the linter stays happy :))
-        return None
+        return

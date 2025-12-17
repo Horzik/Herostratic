@@ -5,14 +5,15 @@ from abc import ABC
 import aiofiles
 import json
 
+from utils.io_utils import atomic_json_write
 from utils.logger import LogConfig, init_logging, get_logger
 from utils.network_utils import create_session, get_bytes
 
 
 class BaseScraper(ABC):
-    """ Base class for async scrapers. Enters with a session ==> run as context manager. \n
+    """ Base class for async scrapers.
+        Enters with a session ==> run as context manager. \n
         Provides lock/logger,  \n
-        Open and run the children as context managers.
     """
     MODULE_NAME: str = None
     BASE_URL: str = None
@@ -30,7 +31,7 @@ class BaseScraper(ABC):
         self._session = None # Create on enter, close on exit
         self._semaphore = Semaphore(self.SEMAPHORE_COUNT)
 
-        # Task stats
+        # Stats
         self.pages_scraped = 0
         self.errors = []
 
@@ -50,7 +51,7 @@ class BaseScraper(ABC):
 
 
     @staticmethod
-    async def scrape(tasks) -> list:
+    async def scrape(tasks) -> list | dict:
         # todo remove
         """ Runs all jobs of the provided coroutines list. """
         return await gather(*tasks, return_exceptions=True)
@@ -71,8 +72,5 @@ class BaseScraper(ABC):
 
     async def write_results(self, processed_results):
         """ Writes the passed results into 'OUTPUT_FILE' \n"""
-        # todo do some exception checks? (OSError, PermissionError...)
         async with self.lock:
-            async with aiofiles.open(self.OUTPUT_FILE, "w", encoding='utf-8') as p:
-                await p.write(json.dumps(processed_results, indent=2, ensure_ascii=False))
-                self.logger.info(f"Saved results to '{self.OUTPUT_FILE}'")
+            await atomic_json_write(processed_results, self.OUTPUT_FILE)

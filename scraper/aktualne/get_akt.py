@@ -17,7 +17,7 @@ from utils.logger import LogConfig, destroy
     it seems to have been proven otherwise (original seems to be about 3 times faster.
     The concept is nice and should work in theory, but whole bunch of changes
     would need to be done to make it work correctly. 
-    
+         
     --> Use "get_aktualne_articles.py"
 """
 
@@ -27,7 +27,9 @@ class ArtResults:
     articles_processed: int = 0
     listings_parsed: int = 0
 
-
+# TODO ==> Try to make the jobs for each X articles, instead of 1 task for 1 article as is now
+# This uses the binary search for getting max pages, kinda interesting, and the flow *should* be faster
+# than the original (in theory...)
 class AktualneListingsScraper(BaseScraper):
     """ WIP => Goes over all available listings from 'aktualne' sites and returns valid article links """
     MODULE_NAME = 'aktualne_listings'
@@ -115,22 +117,28 @@ class AktualneListingsScraper(BaseScraper):
         return True
 
 
+    # todo write the resulted max_pages programmatically instead of hardcoding like this
     async def get_max_page(self, url=BASE_URL) -> int | None:
-        # todo write the resulted max_pages programmatically instead of hardcoding like this
+        """
+            Little binary search for getting max pages from checking the url. \n
+            On the page it asserts the existence of the "next page" button (or the lack thereof).
+        """
+        self.logger.debug(f"Checking max pages amount for url: '{url}'")
+        left = 1
+        right = 14000  # Approximate ceiling
+        loop_count = 0
+
+        # We just hardcoded the results
         if url == 'https://zpravy.aktualne.cz/':
             return 13353
         if url == 'https://zpravy.aktualne.cz/domaci/':
             return 3803
 
-        left = 1
-        right = 14000 # Approximate ceiling
-        loop_count = 0
         while left <= right:
             loop_count += 1
             mid = (left + right) // 2
-            test_url = f"{url}?page={mid}"
-            self.logger.debug(f"test_url: {test_url}")
-            soup = await self.get_soup(test_url)
+            new_url = f"{url}?page={mid}" # Get new url
+            soup = await self.get_soup(new_url)
             if self.assert_listing(soup):
                 next_page = await self.get_next_page(soup)
                 if next_page: # Too low
@@ -140,10 +148,11 @@ class AktualneListingsScraper(BaseScraper):
                 else: # On target
                     self.logger.info(f"Found the final page: {mid}")
                     return mid
-            if soup: # Too high
+            elif soup: # Too high
                 right = mid - 1
                 self.logger.info(f"Continuing to the loop number {loop_count + 1}, current max page is {mid}...")
                 continue
+
         self.logger.error(f"Failed to find the final page, {loop_count} loops...")
         return None
 
