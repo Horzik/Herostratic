@@ -9,10 +9,11 @@ from scraper.site_configs import BASE_POLICE_URL, POLICE_ARCHIVE_SELECTORS, POLI
     TABLE_SELECTORS
 
 
+
 class MunicipalityParser(ABC):
     ARCHIVE_SELECTOR = POLICE_ARCHIVE_SELECTORS['content_archiv']
     BASE_URL = BASE_POLICE_URL
-    EXCLUDE_KEYWORD = 'archiv'
+    EXCL_ARCH_WORD = 'archiv'
 
     def __init__(self, scraper, municipality, url, soup, logger):
         self.scraper = scraper
@@ -52,7 +53,7 @@ class MunicipalityParser(ABC):
         """ Append the processed urls to the provided list, return that list """
         for link_el in el_list:
             link_url = self._mk_url(link_el)
-            if remove_arch_links and self.EXCLUDE_KEYWORD in link_url.lower():
+            if remove_arch_links and self.EXCL_ARCH_WORD in link_url.lower():
                 continue
             links_list.append(link_url)
 
@@ -370,6 +371,7 @@ class MoravskoslezParser(AllLinksParser):
         return list(set(moravskoslez_non_years))
 
 
+# todo is this correct
 MUNICIPALITY_PARSERS = {
     "Informační": OnlyYearLinksParser,
     "hl. m. Praha": OnlyYearLinksParser,
@@ -385,5 +387,4 @@ MUNICIPALITY_PARSERS = {
     "Jihomor": JihomorParser,
     "Zlín": ZlinParser,
     "Olomouc": OlomoucParser,
-    "Moravskoslez": MoravskoslezParser,
-}
+    "Moravskoslez": MoravskoslezParser}

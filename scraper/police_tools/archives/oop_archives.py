@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import time
+from asyncio import gather
 from datetime import timedelta
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -12,11 +13,11 @@ from scraper.site_configs import BASE_POLICE_URL, POLICE_ARCHIVE_SELECTORS
 from utils.logger import LogConfig, destroy
 
 
-# TODO !!! => make a module that goes to BASE_URL and gets the POLICE_SITES
 """ 
     Checks the input municipalities 'homepages' and returns their corresponding archive pages
     This is the first refactored module, maybe not best practices, revisit...
 """
+# todo => make a module that goes to BASE_URL and gets the POLICE_SITES
 # todo 2 ==> verify we get the correct links (can we?)
 # todo 3 ==> log all processed and failed archives
 class ScrapeArchive(BaseScraper):
@@ -29,8 +30,7 @@ class ScrapeArchive(BaseScraper):
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
         log_file_path=LOG_DIR / 'police_archives.log',
-        log_errors_file_path=ERRORS_LOG_FP
-    )
+        log_errors_file_path=ERRORS_LOG_FP)
 
 
     @staticmethod
@@ -61,6 +61,7 @@ class ScrapeArchive(BaseScraper):
             self.errors.append(link)
             self.pages_scraped += 1
             return False
+
         soup = BeautifulSoup(content, 'lxml')
         pager = soup.select_one('p.pager')
         if pager:
@@ -68,6 +69,7 @@ class ScrapeArchive(BaseScraper):
             self.errors.append(link)
             self.pages_scraped += 1
             return False
+
         else:
             self.logger.debug(f"Validated link: '{link}'")
             self.pages_scraped += 1
@@ -112,6 +114,7 @@ class ScrapeArchive(BaseScraper):
             if not await self.validate_link(archive_link):
                 continue
             archive_dict.setdefault(municipality, []).append(archive_link)
+
         return archive_dict
 
 
@@ -122,7 +125,6 @@ class ScrapeArchive(BaseScraper):
 
 
     async def scrape_archive(self, url: str):
-        await asyncio.sleep(random.uniform(0.1, 0.5)) # Play nice, it is the police after all
         try:
             municipality, link = await self.parser(url)
             return municipality, link
@@ -137,9 +139,9 @@ class ScrapeArchive(BaseScraper):
         self.logger.info(f'Starting {__name__}...')
 
         tasks = self.prepare_tasks(self.INPUT_FILE)
-        results = await self.scrape(tasks)
+        results = await gather(*tasks, return_exceptions=True)
         processed_res = await self.process_results(results)
-        await self.write_results(processed_res)
+        self.write_results(processed_res)
 
         duration = timedelta(seconds=time.perf_counter() - start_time)
         self.logger.info(f"Finished in {duration}, validated {self.pages_scraped - len(self.errors)}/{self.pages_scraped} links, exiting...")
@@ -147,11 +149,11 @@ class ScrapeArchive(BaseScraper):
 
 async def main():
     async with ScrapeArchive() as scr:
-        # todo does the try block here make sense?
         try:
             await scr.run()
         finally:
             destroy()
+
 
 if __name__ == '__main__':
     asyncio.run(main())

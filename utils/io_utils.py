@@ -63,8 +63,8 @@ def atomic_json_write(data: dict | list, fp: str | Path):
     except Exception as r:
         if tmp_name and os.path.exists(tmp_name):
             os.unlink(tmp_name)
-        logger.critical(f"!!CRITICAL ERROR WRITING RESULTS TO'!!", exc_info=True)
-        raise CriticalDataError(f"Failed to write {fp}") from r
+        logger.critical(f"!Error while writing results, raising the exception...", exc_info=True)
+        raise CriticalDataError(r)
 
 
 async def parse_xml_tree(content_bytes: bytes, url: str) -> ET.Element | None:

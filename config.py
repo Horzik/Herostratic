@@ -27,8 +27,7 @@ HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
 DISTRICTS_FP = OUTPUT_DIR / "districts.txt"
 
-
-# Site FPs
+# Sites FPsa
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
@@ -44,7 +43,6 @@ METRO_PATHS_FP = OUTPUT_DIR / "metro_paths.txt"
 METRO_ARTICLES_FP = OUTPUT_DIR / "metro_articles.json"
 METRO_RESULTS_FP = OUTPUT_DIR / "metro_results.json"
 
-
 # Parsing and scraping filters and keywords
 URL_KEYWORDS = ['spray', 'sprey', 'sprej', 'graffiti', 'vandal', 'cmaral', 'mural', 'street art', 'street-art'] # todo rename this (also used for article parsing)
 ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
@@ -54,17 +52,19 @@ EXCLUDE_SOCIAL_KEYWORDS = ['mailto:','twitter.com/share', 'facebook.com/sharer',
 # EXCLUDE_SITEMAP_KEYWORDS = ['auto', 'moto', 'sport', 'volby', 'fotbal', 'hokej', 'finance', 'ekonomika', 'hry', 'politika']
 # EXCLUDE_URL_KEYWORDS = ['ukrajin', 'israel', 'palestin', 'fyzick', 'utok', 'anti', 'hate', 'rasis']
 
-# Sitemap constants
+# Sitemap
 SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 URL_EL = f".//{SITEMAP_NS}url"
 LOC_EL = f"{SITEMAP_NS}loc"
 LASTMOD_EL = f"{SITEMAP_NS}lastmod"
 SITEMAP_INDEX_EL = f".//{SITEMAP_NS}loc"
 
-# Various constants
+# I/O
 MAX_RETRIES = 3
 TIMEOUT = 10
 POPO_TIMEOUT = 40
+
+# Various
 PIG_RANKS = ['nprap.', 'plk.', 'por.', 'prap.', 'kpt.', 'mjr.', 'pprap.', 'npor.']
 CZECH_MONTHS = [
         'ledna', 'února', 'března', 'dubna', 'května', 'června',

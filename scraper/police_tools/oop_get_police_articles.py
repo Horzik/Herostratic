@@ -42,8 +42,7 @@ class ListingsParser(BaseScraper):
         log_level=logging.DEBUG,
         log_std_level=logging.INFO,
         log_file_path=LOG_DIR / 'get_police_articles.log',
-        log_errors_file_path=ERRORS_LOG_FP
-    )
+        log_errors_file_path=ERRORS_LOG_FP)
 
 
     async def _read_and_write(
@@ -97,6 +96,7 @@ class ListingsParser(BaseScraper):
 
         return ScrapeLogData(saved_articles, failed_articles, articles_processed, total_pages)
 
+
     def get_next_page(
         self,
         main_soup,
@@ -120,6 +120,7 @@ class ListingsParser(BaseScraper):
             next_url = None
 
         return next_url
+
 
     def parse_listing(
         self,
@@ -200,8 +201,8 @@ class ListingsParser(BaseScraper):
         timer_start = time.time()
         saved_articles, failed_articles, articles_processed, total_pages = await self.scrape()
         timer_end = time.time()
-        formatted_time = str(timedelta(seconds=timer_end - timer_start))
 
+        formatted_time = str(timedelta(seconds=timer_end - timer_start))
         self.logger.info(f"Finished scraping in {formatted_time}")
         self.logger.info(f"Processed {articles_processed} articles from {total_pages} pages, saved {saved_articles}, failed {failed_articles}")
         self.logger.info(f"Exiting...")

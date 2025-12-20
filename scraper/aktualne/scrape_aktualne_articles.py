@@ -17,7 +17,6 @@ from utils.logger import LogConfig, destroy
 @dataclass
 class ScrapingStats:
     saved_articles: int = 0
-    tasks_len: int = 0
 
 
 class ScrapeResult(TypedDict):
@@ -40,8 +39,7 @@ class AktualneArticlesScraper(BaseScraper):
         log_level=logging.DEBUG,
         log_std_level=logging.INFO,
         log_file_path=LOG_DIR / 'scrape_aktualne_articles.log',
-        log_errors_file_path=ERRORS_LOG_FP
-    )
+        log_errors_file_path=ERRORS_LOG_FP)
 
 
     def __init__(self):
@@ -49,7 +47,6 @@ class AktualneArticlesScraper(BaseScraper):
         self.stats = ScrapingStats()
         self.res_buffer = list()
         self.buffer_threshold = 10
-        self.all_tasks_len = 0 # Can be used for progress bar (yagni)
 
 
     @staticmethod
@@ -103,7 +100,6 @@ class AktualneArticlesScraper(BaseScraper):
         author_text = author_el.text.strip() if author_el else 'no_author' # TODO fails everytime
         date_el = soup.select_one('a.author__date')
         date_text = date_el.text.strip() if date_el else 'no_date' # TODO fails everytime
-
         content_text = await self.get_content_text(soup, url)
 
         result = ScrapeResult(
@@ -145,7 +141,6 @@ class AktualneArticlesScraper(BaseScraper):
             for line in a_lines:
                 art_links.append(line.strip())
 
-        self.all_tasks_len = len(art_links)
         return [self.scrape_article(url) for url in art_links]
 
 

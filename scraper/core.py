@@ -5,7 +5,7 @@ from abc import ABC
 import aiofiles
 import json
 
-from utils.io_utils import atomic_json_write
+from utils.io_utils import atomic_json_write, CriticalDataError
 from utils.logger import LogConfig, init_logging, get_logger
 from utils.network_utils import create_session, get_bytes
 
@@ -50,13 +50,6 @@ class BaseScraper(ABC):
         return NotImplementedError
 
 
-    @staticmethod
-    async def scrape(tasks) -> list | dict:
-        # todo remove
-        """ Runs all jobs of the provided coroutines list. """
-        return await gather(*tasks, return_exceptions=True)
-
-
     async def get_soup(self, url: str) -> BeautifulSoup | None:
         page_bytes = await self.fetch(url, gov_site=self.GOV_SITE)
         if page_bytes is None:
@@ -70,7 +63,29 @@ class BaseScraper(ABC):
         return res if res else None
 
 
-    async def write_results(self, processed_results):
-        """ Writes the passed results into 'OUTPUT_FILE' \n"""
-        async with self.lock:
-            await atomic_json_write(processed_results, self.OUTPUT_FILE)
+    def write_results(self, data: dict | list) -> None:
+        try:
+            with self.lock:
+                atomic_json_write(data, self.OUTPUT_FILE)
+        except CriticalDataError:
+            raise
+
+
+    def get_element(self, soup, selector):
+        return soup.select(selector) if self.assert_element(selector, soup) else None
+
+
+    async def assert_element(self, url: str, selector: str, soup=None) -> bool:
+        """ Asserts an element in the url's html is selectable by the Soup.
+            Optional to pass in the soup directly.
+         """
+        try:
+            f_soup = soup if soup else self.get_soup(url)
+            if f_soup.select_one(selector):
+                return True
+            else:
+                self.logger.error(f"Failed asserting element '{selector}'...")
+                return False
+        except Exception:
+            self.logger.exception(f"Unknown error while asserting year links for archive '{url}...'")
+            raise

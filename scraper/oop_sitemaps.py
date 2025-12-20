@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import xml.etree.ElementTree as ET
+from asyncio import gather
 
 from scraper.core import BaseScraper
 from utils.io_utils import async_json_read, parse_xml_tree
@@ -26,7 +27,8 @@ class ScrapeSitemapArticles(BaseScraper):
     async def extract_sitemap_urls(self, root: ET.Element) -> list[str]:
         sitemap_urls = root.findall(SITEMAP_INDEX_EL)
         tasks = [self.parser(url=loc.text) for loc in sitemap_urls]
-        result = await self.scrape(tasks)
+        result = await gather(*tasks, return_exceptions=True)
+
         all_urls = [url for sublist in result for url in sublist]
         return all_urls
 
@@ -62,36 +64,42 @@ class ScrapeSitemapArticles(BaseScraper):
     async def scrape_domain(self, domain: str, sitemaps: list[str]):
         self.logger.info(f"Processing {domain}")
         tasks = [self.parser(url=sitemap) for sitemap in sitemaps]
-        results = await self.scrape(tasks)
+        results = await gather(*tasks, return_exceptions=True)
+
         self.logger.info(f"Finished processing {domain}, results: {results}")
+
         all_articles = []
         for matching_articles in results:
             all_articles.extend(matching_articles)
+
         self.logger.info(f"Found this {all_articles}")
         return domain, all_articles
 
-    def process_results(self, results):
+
+    def process_results(self, results: list):
         articles_by_domain = {}
         for result in results:
-            # todo why does this fail?
             if isinstance(result, Exception):
                 self.logger.error(f"Task failed: {result}")
                 continue
             domain, articles = result
             if articles:
                 articles_by_domain[domain] = articles
+
         return articles_by_domain
 
-    async def prepare_domains(self, data_fp) -> list:
+
+    async def prep_tasks(self, data_fp) -> list:
         sitemaps_data: dict = await async_json_read(data_fp)
         return [self.scrape_domain(domain, sitemaps)
                 for domain, sitemaps in sitemaps_data.items()]
 
+
     async def run(self):
-        tasks = await self.prepare_domains(self.INPUT_FILE)
-        article_urls = await self.scrape(tasks)
-        results = self.process_results(article_urls)
-        await self.write_results(results)
+        tasks = await self.prep_tasks(self.INPUT_FILE)
+        article_results = await gather(*tasks, return_exceptions=True)
+        results = self.process_results(article_results)
+        self.write_results(results)
 
 async def main():
     async with ScrapeSitemapArticles() as scr:

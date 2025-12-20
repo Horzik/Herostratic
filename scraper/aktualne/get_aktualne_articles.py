@@ -1,14 +1,14 @@
-import os
+from asyncio import gather
 from dataclasses import dataclass
+from aiofiles import open as aiopen
 import asyncio
 import logging
 import time
 
-from aiofiles import open as aiopen
-
 from config import AKTUALNE_SITES_FP, LOG_DIR, ERRORS_LOG_FP, URL_KEYWORDS, AKT_ART_FP
 from scraper.core import BaseScraper
 from utils.logger import LogConfig, destroy
+
 
 
 @dataclass
@@ -19,7 +19,8 @@ class ParsingResults:
 
 
 class AktualneListingsScraper(BaseScraper):
-    """ WIP => Goes over all available listings from 'aktualne' sites and returns valid article links """
+    """  Goes over all available listings from 'aktualne' sites and returns valid article links.
+    """
     MODULE_NAME = 'get_aktualne_articles'
     BASE_URL = 'https://zpravy.aktualne.cz'
     INPUT_FILE = AKTUALNE_SITES_FP
@@ -29,8 +30,8 @@ class AktualneListingsScraper(BaseScraper):
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
         log_file_path=LOG_DIR / 'get_aktualne_articles.log',
-        log_errors_file_path=ERRORS_LOG_FP
-    )
+        log_errors_file_path=ERRORS_LOG_FP)
+
 
     def __init__(self):
         super().__init__()
@@ -39,37 +40,36 @@ class AktualneListingsScraper(BaseScraper):
         self.articles_buffer_threshold = 5
 
 
-    def clear_buffer(self):
-        self.articles_buffer.clear()
-        return
-
-
     async def flush_buffer(self):
         async with self.lock:
             async with aiopen(self.OUTPUT_FILE, 'a') as a:
                 for article in self.articles_buffer:
                     await a.write(article + '\n')
-                self.clear_buffer()
+                self.articles_buffer.clear()
+
+
+    def add_to_buffer(self, article_title, article):
+        a_tag = article.select_one('h2.e-web-aktualne-articles-card-horizontal__title a')
+        article_link = a_tag['href']
+
+        self.articles_buffer.append(article_link)
+        self.logger.info(f"Added article with title: '{article_title}'...link: '{article_link}'...")
+        with self.lock:
+            self.stats.saved_articles += 1
 
 
     async def get_listing_articles(self, soup):
         # self.logger.info(f"Parsing a listing....")
-        # articles_el = soup.select('div.left-column') # Select the main content
         container = soup.select_one('div.e-web-aktualne-articles-cards__flex')
         articles_list = container.select('article')
 
         for article in articles_list:
-            # article_title = element.get('data-ga4-title') # Get the text
-            article_title = article.get('aria-label')
             # self.logger.debug(f"Found title: {article_title}")
-            self.stats.articles_processed += 1
+            article_title = article.get('aria-label')
             if any(keyword in article_title for keyword in URL_KEYWORDS):
-                # article_link = soup.select_one('h1 > a')['href'] # todo get the actual link
-                a_tag = article.select_one('h2.e-web-aktualne-articles-card-horizontal__title a')
-                article_link = a_tag['href']
-                self.articles_buffer.append(article_link)
-                self.stats.saved_articles += 1
-                self.logger.info(f"Saving an article with title: '{article_title}'...link: '{article_link}'...")
+                self.add_to_buffer(article_title, article)
+
+        self.stats.articles_processed += 1
 
 
     async def get_next_page(self, soup):
@@ -97,25 +97,27 @@ class AktualneListingsScraper(BaseScraper):
                 return None
 
             await self.get_listing_articles(soup)
-            # Write the buffer when we reach the threshold, this smells being here
             if len(self.articles_buffer) > self.articles_buffer_threshold:
                 await self.flush_buffer()
+
             new_url = await self.get_next_page(soup)
 
         return True
 
 
-    async def mk_tasks(self):
+    def mk_tasks(self) -> list:
         with open(self.INPUT_FILE, 'r') as f:
-            return [self.parse_archive(url) for url in f]
+            tasks = [self.parse_archive(url) for url in f]
+        return tasks
 
 
     async def run(self):
-        timer_start = time.perf_counter()
         self.logger.info(f"Starting the aktualne scraper...")
+        timer_start = time.perf_counter()
 
-        archive_jobs = await self.mk_tasks()
-        await self.scrape(archive_jobs) # todo process results?
+        archive_jobs = self.mk_tasks()
+        await gather(*archive_jobs, return_exceptions=True) # todo process results?
+
         await self.flush_buffer()
         timer_end = time.perf_counter()
 
@@ -134,4 +136,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

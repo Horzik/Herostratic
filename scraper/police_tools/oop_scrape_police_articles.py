@@ -40,6 +40,7 @@ class ScrapingStats:
 type Domain = str
 type Year = str
 
+
 class PoliceArticlesScraper(BaseScraper):
     MODULE_NAME = 'scrape_police_articles'
     BASE_URL = BASE_POLICE_URL
@@ -145,6 +146,7 @@ class PoliceArticlesScraper(BaseScraper):
                 content_text += tag_text + '\n'
         return content_text
 
+
     @staticmethod
     def get_non_text_elements(title_ref, description_ref, pictures_ref, documents_ref):
         non_text_elements = set()
@@ -157,14 +159,6 @@ class PoliceArticlesScraper(BaseScraper):
         if documents_ref:
             non_text_elements.update(documents_ref)
         return non_text_elements
-
-
-    def assert_element(self, element, url, domain, year):
-        if not element:
-            self.logger.error(f"BS getting '{element(__name__)}' from '{url}', '{domain}'/'{year}'")
-            self.errors.append(f"Failed getting element '{element(__name__)}' from '{url}', '{domain}'/'{year}'")
-            return False
-        return True
 
 
     def get_elements(self, soup, url, domain, year):
@@ -189,7 +183,7 @@ class PoliceArticlesScraper(BaseScraper):
         return p_tags, title_ref, description_ref, content_ref, pictures_ref, documents_ref
 
 
-    async def write_buffer(self):
+    async def flush_buffer(self):
         # Write only if we accumulated 30 articles
         async with self.lock:
             current_results = await async_json_read(self.OUTPUT_FILE)
@@ -253,7 +247,7 @@ class PoliceArticlesScraper(BaseScraper):
             # If the buffer is large enough ==> write it
             if len(self.results_buffer) > self.results_buffer_threshold:
                 self.logger.info(f"Writing from a buffer...")
-                await self.write_buffer()
+                await self.flush_buffer()
             return article_result
 
         except Exception as e:
@@ -277,7 +271,7 @@ class PoliceArticlesScraper(BaseScraper):
         )
 
         self.process_results(article_jobs, article_results)
-        await self.write_buffer() # Write the remaining results
+        await self.flush_buffer() # Write the remaining results
 
         timer_end = time.time()
         elapsed_seconds = timer_end - timer_start

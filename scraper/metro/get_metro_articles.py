@@ -59,7 +59,7 @@ class ScrapeMetroArticles(BaseScraper):
 
 
     @staticmethod
-    def has_keyword(url: str, description: str):
+    def find_keyword(url: str, description: str):
         for word in url.split():
             if any(keyword in word for keyword in URL_KEYWORDS):
                 return True
@@ -70,28 +70,31 @@ class ScrapeMetroArticles(BaseScraper):
 
 
     async def flush_buffer(self) -> None:
+        """ Add the buffer articles to the existing output file.
+        """
+        self.logger.debug(f"Flushing the buffer...")
         try:
             results = await async_json_read(self.OUTPUT_FILE)
-            # Extend with the buffer
             for region, articles in self.articles_buffer.items():
                 results.setdefault(region, []).extend(articles)
+
             atomic_json_write(results, self.OUTPUT_FILE)
 
-            self.logger.debug(f"Flushing the buffer, currently saved {self.stats.saved_articles} articles")
             self.articles_buffer.clear()
+            self.logger.info(f"Flushed {self.stats.saved_articles} articles....")
         except CriticalDataError:
             raise
 
 
     def mk_metro_path(self, region: str) -> tuple[str, str]:
-        """ Metro has regions as paths. We get regions from utils 'get_czechia_districts', because
-            on Metro they are hidden behind JS. \n
-            Here we make a region into it's Metro link, and return it with the region string.
+        """ We get regions from utils 'get_czechia_districts', because metro.cz has them in JS. \n
+            :param region: In the format of "district(municipality)"
+            :type: region str
+            :return: [link, region_name]
+            :rtype: tuple[str, str]
         """
         muni = region.split('(')[1].rstrip(')')
         dist = region.split('(')[0]
-
-        # Add dashes
         municipality = muni.replace(' ', '-').lower()
         district = dist.replace(' ', '-').lower()
 
@@ -101,9 +104,9 @@ class ScrapeMetroArticles(BaseScraper):
         return tup
 
 
-    async def get_next_link(self, url: str) -> str | None:
+    async def next_page(self, url: str) -> str | None:
         soup = await self.get_soup(url)
-        el = soup.select_one('a.ico-right')
+        el = soup.select_one('a.ico-right') # 'next page'
         link = el.get('href') if el else None
         return link
 
@@ -112,16 +115,15 @@ class ScrapeMetroArticles(BaseScraper):
         article_links = {}
         for art in listings_element:
             a_tag = art.select_one('a.art-link')
-            self.stats.total_articles += 1
-            description = art.select_one('p').text
             art_url = a_tag.get('href')
+            description = art.select_one('p').text
 
-            if self.has_keyword(art_url, description):
-                self.stats.saved_articles += 1
-                self.logger.debug(f"Found an article:: '{art_url}'")
+            if self.find_keyword(art_url, description):
                 article_links.setdefault(region, []).append(art_url)
+                self.logger.debug(f"Found a matching article:: '{art_url}'...'")
+                self.stats.saved_articles += 1
 
-            # Log
+            self.stats.total_articles += 1
             if self.stats.total_articles % 100 == 0:
                 self.logger.debug(f"Checked {self.stats.total_articles} articles")
 
@@ -136,7 +138,7 @@ class ScrapeMetroArticles(BaseScraper):
             return None
 
         listings_el = soup.select('div#content div.col-a div.art')
-        if listings_el is None:
+        if not listings_el:
             self.logger.error(f"Error getting listings_el element for url: '{url}'....")
             self.errors.append(url)
             return None
@@ -147,33 +149,29 @@ class ScrapeMetroArticles(BaseScraper):
 
 
     async def scrape_district(self, url: str, region: str) -> None:
+        district_page_count = 0
         new_url = url
-        page_count = 0
-        while new_url: # todo add a counter / safeguard
-            page_count += 1
+        while new_url:
             found_articles = await self.parse_listing(new_url, region)
-
             if found_articles:
                 async with self.lock:
                     # Check if buffer needs writing
                     arts_buff_len = sum(len(articles) for articles in self.articles_buffer.values())
                     if arts_buff_len >= self.articles_buffer_threshold:
                         await self.flush_buffer()
-
                     # Add articles to the buffer
                     for region, urls in found_articles.items():
                         self.articles_buffer.setdefault(region, []).extend(urls)
+                    district_page_count += 1
 
-            # Change the url, last one should be None
-            new_url = await self.get_next_link(new_url)
-
-        self.logger.info(f"Finished scraping '{region}' with {page_count} pages...")
+            # Continue the loop until None...
+            new_url = await self.next_page(new_url)
+        self.logger.info(f"Finished scraping '{region}' with {district_page_count} pages...")
 
 
     async def prepare_tasks(self, custom=False) -> list | None:
         tasks = []
         if not custom:
-            # Proceed as usual
             try:
                 async with aiofiles.open(self.INPUT_FILE, 'r') as a:
                     lines = await a.readlines()
@@ -183,7 +181,6 @@ class ScrapeMetroArticles(BaseScraper):
             except FileNotFoundError:
                 self.logger.error(f"File {self.INPUT_FILE} not found, exiting...")
                 raise FileNotFoundError
-
         else:
             # NOTE: Use this for scraping custom paths (link, custom_name)
             for task in self.custom_input:
@@ -196,8 +193,8 @@ class ScrapeMetroArticles(BaseScraper):
     async def run(self):
         self.logger.info(f'Starting scraper:: {__name__}...')
         start_time = time.perf_counter()
-        tasks = await self.prepare_tasks()
 
+        tasks = await self.prepare_tasks()
         self.logger.debug(f"{len(tasks)} jobs in queue...")
         await gather(*tasks, return_exceptions=True)
 
@@ -205,9 +202,8 @@ class ScrapeMetroArticles(BaseScraper):
         if self.articles_buffer:
             await self.flush_buffer()
 
+        # todo use this as/in a class?
         duration = timedelta(seconds=time.perf_counter() - start_time)
-
-        # todo use this in base class?
         self.logger.info(f"""
             === SCRAPING COMPLETE ===
             Finished in {duration}s
@@ -218,7 +214,6 @@ class ScrapeMetroArticles(BaseScraper):
             """)
         self.logger.error(f"Errors occurred during scraping:: {self.errors}")
         self.logger.info(f"Exiting...")
-
         return
 
 

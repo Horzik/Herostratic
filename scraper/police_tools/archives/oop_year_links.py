@@ -13,7 +13,7 @@ from scraper.site_configs import BASE_POLICE_URL
 from config import POLICE_ARCHIVES_FP, YEAR_LINKS_FP, LOG_DIR, ERRORS_LOG_FP
 
 
-# TODO validation is 'all or nothing' => one failed link will fail the whole municipality
+# Validation is 'all or nothing' => one failed link will fail the whole municipality
 # TODO try making the logging somewhat better
 class YearLinksScraper(BaseScraper):
     MODULE_NAME = "year_links"
@@ -26,8 +26,8 @@ class YearLinksScraper(BaseScraper):
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
         log_file_path=LOG_DIR / 'year_links.log',
-        log_errors_file_path=ERRORS_LOG_FP
-    )
+        log_errors_file_path=ERRORS_LOG_FP)
+
 
     def __init__(self):
         super().__init__()
@@ -35,8 +35,9 @@ class YearLinksScraper(BaseScraper):
 
 
     @staticmethod
-    def _get_parser_for_municipality(municipality: str) -> type[MunicipalityParser]:
-        """Get parser class for municipality, raises if not found"""
+    def get_parser_for_municipality(municipality: str) -> type[MunicipalityParser]:
+        """ Get parser class for municipality, raises if not found.
+        """
         for key, parser_class in MUNICIPALITY_PARSERS.items():
             if key in municipality:
                 return parser_class
@@ -71,14 +72,15 @@ class YearLinksScraper(BaseScraper):
         return sites, failed_archives
 
 
-    async def validate_single_link(self, listing_url: str) -> bool:
+    async def assert_pagination(self, listing_url: str) -> bool:
+        """ Checks if the url has the page pagination.
+        """
         try:
             content = await self.fetch(listing_url, gov_site=True)
             if content is None:
                 return False
-
             soup = BeautifulSoup(content, 'lxml')
-            if soup.select_one('p.pager'): # Pagination means we have the listing
+            if soup.select_one('p.pager'):
                 return True
             else:
                 self.logger.error(f"Failed validating year link '{listing_url}'")
@@ -89,12 +91,13 @@ class YearLinksScraper(BaseScraper):
 
 
     async def validate_links(self, all_years: dict, url: str) -> bool:
-        """ Gets the content of each link and verifies it contains the article listings. """
+        """ Gets the content of each link and verifies it contains the article listings.
+            Validation is 'all or nothing' => finding one failed link will return False.
+         """
         tasks = [
-            self.validate_single_link(listing_url)
+            self.assert_pagination(listing_url)
             for _, urls in all_years.items()
-            for listing_url in urls
-        ]
+            for listing_url in urls]
         results = await gather(*tasks, return_exceptions=True)
 
         all_validated = True
@@ -114,13 +117,14 @@ class YearLinksScraper(BaseScraper):
 
 
     async def parse_municipality(self, municipality, url, soup) -> dict[str, list[str]]:
-        parser_class = self._get_parser_for_municipality(municipality)
+        parser_class = self.get_parser_for_municipality(municipality)
         parser = parser_class(self, municipality, url, soup, self.logger)
         return await parser.parse()
 
 
     async def parse_archive(self, arch_url: str, municipality: str) -> dict[str, list[str]] | None:
-        """ Parse the archive page to return the year links.  """
+        """ Parse the archive page to return the year links.
+        """
         archive_bytes = await self.fetch(arch_url, gov_site=True)
         if archive_bytes is None:
             self.logger.error(f"Failed fetching content for url '{arch_url}'...")
@@ -160,18 +164,17 @@ class YearLinksScraper(BaseScraper):
     async def prepare_tasks(self, data_fp) -> list:
         with open(data_fp, "r") as a:
             archives: dict = json.load(a)
+
         return [
             (municipality, self.get_all_links(arch_url, municipality))
             for municipality, urls in archives.items()
-            for arch_url in urls
-        ]
+            for arch_url in urls]
 
 
     async def scrape(self, tasks) -> list:
         """ Override the class 'scrape' because we are adding the 'municipality' to tasks. """
         return await gather(*[coro for _, coro in tasks],
-            return_exceptions=True
-        )
+            return_exceptions=True)
 
 
     async def run(self) -> None:
@@ -180,10 +183,11 @@ class YearLinksScraper(BaseScraper):
         tasks = await self.prepare_tasks(self.INPUT_FILE)
         self.logger.info(f'Scraping {len(tasks)} archive links....')
 
-        results = await self.scrape(tasks)
+        results = await gather(*tasks, return_exceptions=True)
+
         sites, failed_arch_count = self.process_archive_results(tasks, results)
         if failed_arch_count < len(sites):
-            await self.write_results(sites)
+            self.write_results(sites)
 
         duration = timedelta(seconds=time.perf_counter() - start_time)
         self.logger.info(
