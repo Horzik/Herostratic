@@ -72,8 +72,8 @@ class YearLinksScraper(BaseScraper):
         return sites, failed_archives
 
 
-    async def assert_pagination(self, listing_url: str) -> bool:
-        """ Checks if the url has the page pagination.
+    async def has_pagination(self, listing_url: str) -> bool:
+        """ Checks if the url has the page pagination element.
         """
         try:
             content = await self.fetch(listing_url, gov_site=True)
@@ -95,7 +95,7 @@ class YearLinksScraper(BaseScraper):
             Validation is 'all or nothing' => finding one failed link will return False.
          """
         tasks = [
-            self.assert_pagination(listing_url)
+            self.has_pagination(listing_url)
             for _, urls in all_years.items()
             for listing_url in urls]
         results = await gather(*tasks, return_exceptions=True)

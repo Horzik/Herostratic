@@ -122,7 +122,7 @@ class PoliceArticlesScraper(BaseScraper):
         return author_text
 
 
-    def assert_year(self, year, date_text, soup, url, domain):
+    def get_year(self, year, date_text, soup, url, domain):
         if year == "non_years" and date_text is not None:
             year = date_text[-5:].strip('\n')
         elif year == "non_years" and date_text is None:
@@ -184,9 +184,13 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     async def flush_buffer(self):
-        # Write only if we accumulated 30 articles
+        """ Writes only after we accumulate 30 articles.
+        """
         async with self.lock:
+            # Read what we already saved
             current_results = await async_json_read(self.OUTPUT_FILE)
+
+            # Append all the buffered results to the 'current_results'
             for domain, year, content in self.results_buffer:
                 if domain not in current_results:
                     current_results[domain] = {}
@@ -194,9 +198,9 @@ class PoliceArticlesScraper(BaseScraper):
                     current_results[domain][year] = []
                 current_results[domain][year].append(content)
 
-        # Write the results back and clean the buffer
-        atomic_json_write(current_results, self.OUTPUT_FILE) # todo do this inside the lock??
-        self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
+            # Write the results back and clean the buffer
+            atomic_json_write(current_results, self.OUTPUT_FILE)  # todo do this inside the lock??
+            self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
         return
 
 
@@ -218,7 +222,7 @@ class PoliceArticlesScraper(BaseScraper):
             has_documents = True if documents_ref else False
             date_text = self.get_date(content_ref, url, domain, year)
             author_text = self.get_author(content_ref)
-            year = self.assert_year(year, date_text, soup, url, domain)
+            year = self.get_year(year, date_text, soup, url, domain)
 
             # To get content_text, first define elements without the text
             non_text_elements = self.get_non_text_elements(
@@ -267,7 +271,7 @@ class PoliceArticlesScraper(BaseScraper):
             for url in urls_list
         ]
         article_results = await asyncio.gather(*[coro for _, coro in article_jobs],
-         return_exceptions=True
+            return_exceptions=True
         )
 
         self.process_results(article_jobs, article_results)
@@ -278,10 +282,10 @@ class PoliceArticlesScraper(BaseScraper):
         formatted_time = str(timedelta(seconds=elapsed_seconds))
 
         self.logger.info(f"Finished scraping in {formatted_time}")
-        self.logger.info(f"Processed {self.stats.articles_processed} articles, saved {self.stats.saved_articles}, "
-                         f"failed {self.stats.failed_articles}")
-        self.logger.info(f"{self.stats.missing_date} missing date, {self.stats.missing_author} missing author,"
-                         f" {self.stats.with_pictures} have pictures and {self.stats.with_documents} have documents")
+        self.logger.info(f"Processed {self.stats.articles_processed} articles, saved {self.stats.saved_articles}.")
+        self.logger.info(f"{self.stats.failed_articles} articles failed.")
+        self.logger.info(f"{self.stats.missing_date} are missing date, {self.stats.missing_author} are missing author.")
+        self.logger.info(f" {self.stats.with_pictures} have pictures and {self.stats.with_documents} have documents.")
         self.logger.info(f"Exiting...")
 
 

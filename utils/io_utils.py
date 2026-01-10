@@ -48,10 +48,9 @@ async def async_json_read(fp: str) -> dict:
     return data
 
 
+# todo add file creation if not existing?
 def atomic_json_write(data: dict | list, fp: str | Path):
-    # todo add file creation if not existing?
-    """
-        Helper to write json 'atomically': first writes to a tmp file \n
+    """ Helper to write json 'atomically': first writes to a tmp file
         and only then to the target file (cleans up the tmp file afterward)
     """
     try:

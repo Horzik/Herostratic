@@ -6,10 +6,12 @@ DATA_DIR = ROOT / "data"
 OUTPUT_DIR = DATA_DIR / "output"
 INPUT_DIR = DATA_DIR / "input"
 LOG_DIR = DATA_DIR / "logs"
+IMG_DIT = DATA_DIR / "img"
 
 # Create the "output" and "logs" dirs if they don't exist
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+IMG_DIT.mkdir(parents=True, exist_ok=True)
 
 # Logs FPs
 ERRORS_LOG_FP = LOG_DIR / "errors.log"
@@ -42,9 +44,11 @@ METRO_SITE_FP = INPUT_DIR / "metro_site.txt"
 METRO_PATHS_FP = OUTPUT_DIR / "metro_paths.txt"
 METRO_ARTICLES_FP = OUTPUT_DIR / "metro_articles.json"
 METRO_RESULTS_FP = OUTPUT_DIR / "metro_results.json"
+METRO_IMG_FP = OUTPUT_DIR / ""
 
 # Parsing and scraping filters and keywords
-URL_KEYWORDS = ['spray', 'sprey', 'sprej', 'graffiti', 'vandal', 'cmaral', 'mural', 'street art', 'street-art'] # todo rename this (also used for article parsing)
+URL_KEYWORDS = ['spray', 'sprey', 'sprej', 'graffiti', 'grafiti', 'grafity',
+                'vandal', 'cmaral', 'mural', 'street art', 'street-art']  # todo rename this variable (it's also used for article parsing)
 ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
 DECODE_FORMATS = ['utf-8', 'windows-1250', 'iso-8859-2']
 EXCLUDE_ARCHIVE_KEYWORDS = ['nehody', 'násil', 'nasil']
@@ -70,7 +74,8 @@ CZECH_MONTHS = [
         'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince',
         'leden','únor','březen','duben','květen','červen',
-        'červenec', 'srpen', 'září',  'říjen', 'listopad', 'prosinec']
+        'červenec', 'srpen', 'září',  'říjen', 'listopad', 'prosinec'
+]
 
 # Regex for getting the date from article content
 months_pattern = '|'.join(CZECH_MONTHS)

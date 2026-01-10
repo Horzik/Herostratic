@@ -53,6 +53,7 @@ class BaseScraper(ABC):
     async def get_soup(self, url: str) -> BeautifulSoup | None:
         page_bytes = await self.fetch(url, gov_site=self.GOV_SITE)
         if page_bytes is None:
+            self.logger.error(f"Failed to fetch page from:: '{url}'...")
             return None
         soup = BeautifulSoup(page_bytes, 'lxml')
         return soup
@@ -71,16 +72,12 @@ class BaseScraper(ABC):
             raise
 
 
-    def get_element(self, soup, selector):
-        return soup.select(selector) if self.assert_element(selector, soup) else None
-
-
-    async def assert_element(self, url: str, selector: str, soup=None) -> bool:
+    async def validate_element(self, url: str, selector: str, soup=None) -> bool:
         """ Asserts an element in the url's html is selectable by the Soup.
             Optional to pass in the soup directly.
          """
         try:
-            f_soup = soup if soup else self.get_soup(url)
+            f_soup = soup if soup else await self.get_soup(url)
             if f_soup.select_one(selector):
                 return True
             else:

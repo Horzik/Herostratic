@@ -1,14 +1,13 @@
 import json
-from asyncio.tasks import gather
-from dataclasses import dataclass
 import asyncio
 import logging
+import aiofiles
+from asyncio.tasks import gather
+from bs4 import BeautifulSoup
+from dataclasses import dataclass
 from typing import TypedDict
 
-import aiofiles
-from bs4 import BeautifulSoup
-
-from config import LOG_DIR, ERRORS_LOG_FP, AKT_ART_FP, AKT_RESULTS_FP, METRO_ARTICLES_FP, METRO_RESULTS_FP
+from config import LOG_DIR, ERRORS_LOG_FP, METRO_ARTICLES_FP, METRO_RESULTS_FP, METRO_IMG_FP
 from scraper.core import BaseScraper
 from utils.io_utils import atomic_json_write
 from utils.logger import LogConfig, destroy
@@ -23,23 +22,25 @@ class ScrapingStats:
 class ScrapeResult(TypedDict):
     url: str
     title: str
+    region: str
     author: str | None
     date: str | None
     text: str
+    # imgs: list[str] | None
 
 
 class MetroArticleScraper(BaseScraper):
-    # TODO get the pictures
     """ WIP Scrapes aktualne article links for data. """
     MODULE_NAME = 'scrape_metro_articles'
     BASE_URL = 'https://metro.cz'
     INPUT_FILE = METRO_ARTICLES_FP
     OUTPUT_FILE = METRO_RESULTS_FP
+    IMG_FILE = METRO_IMG_FP
     GOV_SITE = False
-    SEMAPHORE_COUNT = 10
+    SEMAPHORE_COUNT = 2
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
-        log_std_level=logging.INFO,
+        log_std_level=logging.DEBUG,
         log_file_path=LOG_DIR / 'scrape_metro_articles.log',
         log_errors_file_path=ERRORS_LOG_FP)
 
@@ -49,6 +50,47 @@ class MetroArticleScraper(BaseScraper):
         self.stats = ScrapingStats()
         self.res_buffer = list()
         self.buffer_threshold = 10
+
+
+    # async def get_imgs(self, soup) -> list:
+    #     # TODO, the HTML *should* contain all we need
+    #     """ Get all urls of images from the article gallery.
+    #      """
+    #     self.logger.debug(f"Parsing the images...")
+    #
+    #     imagespace_el = soup.select_one('samp.imagespace')
+    #     self.logger.debug(f"Found first gallery url element...: {imagespace_el}")
+    #
+    #     parent_el = imagespace_el.parent
+    #     self.logger.debug(f"Parent element...: {parent_el.prettify()}")
+    #     self.logger.debug(f"Gallery url:: {imagespace_el}")
+    #     gallery_url = parent_el.get('href').strip()
+    #     curr_soup = await self.get_soup(imagespace_el) # Set the first soup
+    #     # self.logger.debug(f"Got the soup....")
+    #
+    #     pager = curr_soup.select_one('div.navigation > br.h').get_text()
+    #     self.logger.debug(f"found some pager")
+    #     curr_img = int(pager.split('/')[0].strip())
+    #     max_imgs = int(pager.split('/')[1].strip())
+    #     self.logger.debug(f"Curr img: {curr_img} next img: {max_imgs}")
+    #
+    #     images_urls = []
+    #     while curr_img <= max_imgs: # The next img button is always there ==> check the image count directly
+    #         self.logger.debug(f"In the img loop....")
+    #         img_style = curr_soup.select_one('u.odklad').get('style') # The image url is embedded in the "style" attribute
+    #         url_match = re.search(r'url\((.*?)\)', img_style)
+    #         if url_match:
+    #             url = url_match.group(1).strip('"\'')
+    #             images_urls.append(url)
+    #
+    #         next_page = curr_soup.select_one('div#navigation a.img-next').get('href')
+    #         curr_soup = await self.get_soup(next_page)
+    #         curr_img = pager.split('/')[0].strip()
+    #
+    #
+    #     self.logger.debug(f"Saved {len(images_urls)}/{max_imgs} images:: \n "
+    #                       f"{images_urls}")
+    #     return images_urls
 
 
     async def read_results(self) -> list:
@@ -74,18 +116,14 @@ class MetroArticleScraper(BaseScraper):
         return
 
 
-    def get_content_text(self, soup: BeautifulSoup, url: str) -> str:
+    async def get_content_text(self, soup: BeautifulSoup, url: str) -> str:
         self.logger.debug(f"Parsing the content text...")
-
-        container_el = self.get_element(soup, 'div#art-text')
-        if not container_el:
-            self.logger.error(f"Error: no article container found in url: '{url}")
-            self.errors.append("fError parsing '{url}', ")
-            raise Exception # todo raising exceptions?
-
+        container_el = soup.select_one('div#art-text')
+        # if not container_el:
+        #     self.logger.error(f"Error: no article container found in url: '{url}")
+        #     self.errors.append("fError parsing '{url}', ")
         text = ''
         for el in container_el:
-            self.logger.debug(f"Content loop 'el'::: {el}")
             if el == 'div':
                 continue
             text = text + el.text.strip() + '\n'
@@ -97,8 +135,8 @@ class MetroArticleScraper(BaseScraper):
         authors_text = ''
         for author in authors_el:
             authors_text += author.text.strip()
-        self.logger.debug(f"Authors found: '{authors_text}'")
 
+        self.logger.debug(f"Authors found: '{authors_text}'")
         return authors_text
 
 
@@ -106,11 +144,11 @@ class MetroArticleScraper(BaseScraper):
         title_el = soup.select_one('h1.arttit')
         if not title_el:
             self.logger.error(f"Error parsing the title for url: '{url}'")
-            self.errors.append("fError parsing '{url}', ")
+            self.errors.append(f"Error parsing '{url}', ")
             raise Exception
+
         title_text = title_el.text.strip()
         self.logger.debug(f"Title found:: '{title_text}'")
-
         return title_text
 
 
@@ -118,11 +156,10 @@ class MetroArticleScraper(BaseScraper):
         date_el = soup.select_one('div.art-info span.time')
         date_text = date_el.text.strip().replace('\xa0', ' ')
         self.logger.debug(f"Found date:: {date_text}")
-
         return date_text
 
 
-    async def parse_html(self, url: str) -> ScrapeResult:
+    async def parse_html(self, url: str, region: str) -> ScrapeResult:
         soup = await self.get_soup(url)
         if not soup:
             self.logger.error(f"Error making the soup for url: '{url}'")
@@ -132,20 +169,24 @@ class MetroArticleScraper(BaseScraper):
         title_text = self.get_title_text(soup, url)
         authors_text = self.get_authors(soup)
         date_text = self.get_date_text(soup)
-        content_text = self.get_content_text(soup, url)
+        content_text = await self.get_content_text(soup, url)
+        # imgs = await self.get_imgs(soup)
 
         result = ScrapeResult(
             url=url,
             title=title_text,
+            region=region,
             author=authors_text,
             date=date_text,
-            text=content_text,)
+            text=content_text,
+            # imgs=imgs
+        )
 
         self.logger.info(f"Finished parsing url: '{url}'...")
         return result
 
 
-    async def add_result(self, result: ScrapeResult, reg: str):
+    async def add_result(self, result: ScrapeResult):
         # TODO add the regions?
         async with self.lock:
             if len(self.res_buffer) > self.buffer_threshold:
@@ -153,11 +194,11 @@ class MetroArticleScraper(BaseScraper):
             self.res_buffer.append(result)
 
 
-    async def scrape_article(self, url: str, reg):
-        """ The main task. """
-        self.logger.debug(f"Scraping url: '{url}'")
-        result = await self.parse_html(url)
-        await self.add_result(result, reg)
+    async def scrape_article(self, url: str, region: str):
+        """ The main task.
+        """
+        result = await self.parse_html(url, region)
+        await self.add_result(result)
         self.stats.saved_articles += 1
         self.logger.info(f"Finished scraping {self.stats.saved_articles} out of {self.stats.all_tasks} articles...")
         return
@@ -180,9 +221,8 @@ class MetroArticleScraper(BaseScraper):
         for region, url_list in tasks_dict.items():
             for url in url_list:
                 tasks.append(self.scrape_article(url.strip(), region))
-                self.logger.debug(f"Data for scrape_article::: {url.strip(), region}")
+                # self.logger.debug(f"Data for scrape_article::: {url.strip(), region}")
 
-        self.logger.debug(f"Returning this as tasks:: {tasks}")
         return tasks
 
 
@@ -190,9 +230,10 @@ class MetroArticleScraper(BaseScraper):
         try:
             self.logger.info(f"Scraper live...")
             jobs = await self.mk_tasks(self.INPUT_FILE)
+
             self.stats.all_tasks = len(jobs)
             self.logger.info(f"Starting {self.stats.all_tasks} tasks...")
-            results = await gather(*jobs, return_exceptions=True)
+            results = await gather(*jobs, return_exceptions=False)
 
             self.process_scrape_results(results)
             self.logger.info(f"Success for {len(results) - len(self.errors)} out of {len(jobs)} tasks, exiting the scraper...")
