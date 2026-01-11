@@ -26,10 +26,10 @@ class BaseScraper(ABC):
 
     def __init__(self):
         init_logging(self.LOG_CONFIG)
-        self.logger = get_logger(f'{self.MODULE_NAME}_scraper')
         self.lock = Lock()
-        self._session = None # Create on enter, close on exit
+        self.logger = get_logger(f'{self.MODULE_NAME}_scraper')
         self._semaphore = Semaphore(self.SEMAPHORE_COUNT)
+        self._session = None # Create on enter, close on exit
 
         # Stats
         self.pages_scraped = 0
@@ -44,10 +44,6 @@ class BaseScraper(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self._session:
             await self._session.__aexit__(exc_type, exc_val, exc_tb)
-
-
-    async def parser(self, url):
-        return NotImplementedError
 
 
     async def get_soup(self, url: str) -> BeautifulSoup | None:
@@ -65,6 +61,9 @@ class BaseScraper(ABC):
 
 
     def write_results(self, data: dict | list) -> None:
+        """ Default write method. Only useful with basic scrapers, others require
+            a more concrete method of writing.
+        """
         try:
             with self.lock:
                 atomic_json_write(data, self.OUTPUT_FILE)
@@ -72,6 +71,12 @@ class BaseScraper(ABC):
             raise
 
 
+    # todo either remove this or make it useful
+    async def parser(self, url):
+        return NotImplementedError
+
+
+    # todo start using this
     async def validate_element(self, url: str, selector: str, soup=None) -> bool:
         """ Asserts an element in the url's html is selectable by the Soup.
             Optional to pass in the soup directly.

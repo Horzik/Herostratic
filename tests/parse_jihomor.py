@@ -9,7 +9,8 @@ from config import JIHOMOR_LINKS_FP
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.network_utils import create_session, get_bytes
 
-kokoti = {
+
+test_urls = {
     # "2008": [
     #   "https://policie.gov.cz/ks-brno.aspx"
     # ],
@@ -93,7 +94,6 @@ async def parse_jihomor_archive(soup: BeautifulSoup, session: ClientSession, sem
         Get the year table, and crawl through to get the years links. \n
         First link => Second link => Multiple urls per year.
     """
-
     jihomor_years = {}
     next_link = BASE_POLICE_URL + soup.select_one('div.infobox a').get('href')
     # Go to the final url and get the links
@@ -109,11 +109,12 @@ async def parse_jihomor_archive(soup: BeautifulSoup, session: ClientSession, sem
 
     return jihomor_years
 
+
 async def main():
     semaphore = Semaphore(30)
     results = {}
     async with create_session() as session:
-        for domain, link in kokoti.items():
+        for domain, link in test_urls.items():
             url = link[0].strip()
             print(f"{domain}: {url}")
             page_bytes = await get_bytes(url=url, session=session, semaphore=semaphore, gov_site=True)
@@ -127,6 +128,7 @@ async def main():
         json.dump(results, f, indent=4)
 
     return results
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,16 +1,15 @@
-from bs4 import BeautifulSoup
 import asyncio
 import aiofiles
+from bs4 import BeautifulSoup
 
 from config import DISTRICTS_FP
 from utils.network_utils import create_session, get_bytes
 
 
+""" This module parses the 'statnisprava' site (which btw, does not have a valid SSL :)), and returns
+    a list of all districts, which are then used to get all possible paths for the "metro.cz" scraper.
 """
-    This module parses the 'statnisprava' site (which btw, does not have a valid SSL :)) in order
-    to get a path of all districts, which is later used for scraping the 'metro.cz' site.
 
-"""
 STATNI_SPRAVA_URL = 'https://www.statnisprava.cz/RSTSP/redakce.nsf/i/kraje_okresy_obce'
 RESULT_FP = DISTRICTS_FP
 

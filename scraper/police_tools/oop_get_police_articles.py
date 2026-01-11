@@ -1,4 +1,9 @@
 import asyncio
+import logging
+import time
+from asyncio import gather
+from bs4 import BeautifulSoup
+from datetime import timedelta
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
@@ -7,12 +12,6 @@ from scraper.core import BaseScraper
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.io_utils import async_json_read, atomic_json_write, CriticalDataError
 from utils.logger import LogConfig, destroy
-
-from asyncio import gather
-from datetime import timedelta
-from bs4 import BeautifulSoup
-import logging
-import time
 
 
 @dataclass
@@ -34,7 +33,7 @@ type NextUrl = str
 class ListingsParser(BaseScraper):
     MODULE_NAME = "get_police_articles"
     BASE_URL = BASE_POLICE_URL
-    INPUT_FILE = YEAR_LINKS_FP
+    INPUT_FILE = YEAR_LINKS_FP # We get this from the "oop_year_links" module
     OUTPUT_FILE = POLICE_ARTICLES_FP
     GOV_SITE = True
     SEMAPHORE_COUNT = 10
@@ -42,7 +41,8 @@ class ListingsParser(BaseScraper):
         log_level=logging.DEBUG,
         log_std_level=logging.INFO,
         log_file_path=LOG_DIR / 'get_police_articles.log',
-        log_errors_file_path=ERRORS_LOG_FP)
+        log_errors_file_path=ERRORS_LOG_FP
+    )
 
 
     async def _read_and_write(

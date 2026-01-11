@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from config import POLICE_ARCHIVES_FP, POLICE_SITES_FP, LOG_DIR, ERRORS_LOG_FP
 from scraper.core import BaseScraper
 from scraper.site_configs import BASE_POLICE_URL, POLICE_ARCHIVE_SELECTORS
+from utils.io_utils import atomic_json_write, CriticalDataError
 from utils.logger import LogConfig, destroy
 
 
@@ -31,6 +32,14 @@ class ScrapeArchive(BaseScraper):
         log_level=logging.DEBUG,
         log_file_path=LOG_DIR / 'police_archives.log',
         log_errors_file_path=ERRORS_LOG_FP)
+
+
+    def write_results(self, data: dict | list) -> None:
+        try:
+            with self.lock:
+                atomic_json_write(data, self.OUTPUT_FILE)
+        except CriticalDataError:
+            raise
 
 
     @staticmethod
@@ -76,7 +85,7 @@ class ScrapeArchive(BaseScraper):
             return True
 
 
-    async def parser(self, url):
+    async def parse_html(self, url):
         self.logger.info(f"Parsing link: '{url}'...")
         main_content_bytes = await self.fetch(url)
         main_soup = BeautifulSoup(main_content_bytes, 'lxml')
@@ -118,15 +127,18 @@ class ScrapeArchive(BaseScraper):
         return archive_dict
 
 
-    def prepare_tasks(self, data_fp) -> list:
-        # Return a list of coroutines
+    def mk_tasks(self, data_fp) -> list:
+        """ Returns a list of coroutines.
+        """
         with open(data_fp, 'r') as f:
-            return [self.scrape_archive(line.strip()) for line in f]
+            tasks = [self.scrape_archive(line.strip()) for line in f]
+
+        return tasks
 
 
     async def scrape_archive(self, url: str):
         try:
-            municipality, link = await self.parser(url)
+            municipality, link = await self.parse_html(url)
             return municipality, link
         except Exception as e: # Catch anything we might have missed
             self.logger.exception(f"Error reading {url}::{e}")
@@ -138,7 +150,7 @@ class ScrapeArchive(BaseScraper):
         start_time = time.perf_counter()
         self.logger.info(f'Starting {__name__}...')
 
-        tasks = self.prepare_tasks(self.INPUT_FILE)
+        tasks = self.mk_tasks(self.INPUT_FILE)
         results = await gather(*tasks, return_exceptions=True)
         processed_res = await self.process_results(results)
         self.write_results(processed_res)

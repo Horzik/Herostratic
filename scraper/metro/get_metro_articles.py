@@ -169,7 +169,7 @@ class ScrapeMetroArticles(BaseScraper):
         self.logger.info(f"Finished scraping '{region}' with {district_page_count} pages...")
 
 
-    async def prepare_tasks(self, custom=False) -> list | None:
+    async def mk_tasks(self, custom=False) -> list | None:
         tasks = []
         if not custom:
             try:
@@ -194,7 +194,7 @@ class ScrapeMetroArticles(BaseScraper):
         self.logger.info(f'Starting scraper:: {__name__}...')
         start_time = time.perf_counter()
 
-        tasks = await self.prepare_tasks()
+        tasks = await self.mk_tasks()
         self.logger.debug(f"{len(tasks)} jobs in queue...")
         await gather(*tasks, return_exceptions=True)
 

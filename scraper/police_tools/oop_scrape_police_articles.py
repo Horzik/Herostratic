@@ -1,31 +1,34 @@
+import asyncio
+import base64
+import logging
 import re
 import time
-import asyncio
-import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from typing import TypedDict
 
+from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, PIG_RANKS, DATE_REGEX, ALL_KEYWORDS
 from scraper.core import BaseScraper
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.io_utils import async_json_read, atomic_json_write
 from utils.logger import LogConfig, destroy
-from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, \
-                    PIG_RANKS, DATE_REGEX, URL_KEYWORDS, ARTICLE_KEYWORDS
 
 
 class ArticleResult(TypedDict):
+    source: str
     title: str
     url: str
-    year: str
+    archive_category: str # Can be either the year or district/city
     date: str | None
     municipality: str
-    keywords: list
-    author: str
+    author: str | None
     description: str
     content: str
     has_pictures: bool
     has_documents: bool
+    keywords: list[str]
+    scraped_at: str
+    html_base64: str
 
 @dataclass
 class ScrapingStats:
@@ -39,7 +42,7 @@ class ScrapingStats:
 
 type Domain = str
 type Year = str
-
+type ResBuffer = list[tuple[Domain, Year, ArticleResult]]
 
 class PoliceArticlesScraper(BaseScraper):
     MODULE_NAME = 'scrape_police_articles'
@@ -58,28 +61,36 @@ class PoliceArticlesScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.stats = ScrapingStats()
-        self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
+        self.results_buffer: ResBuffer = []
         self.results_buffer_threshold = 50
+
+
+    def validate_result(self, result, domain, year, url) -> bool:
+        if isinstance(result, Exception):
+            self.logger.error(
+                f"Error scraping police article: '{domain}'/'{year}', url: '{url}' failed with exception: {result}")
+            self.stats.failed_articles += 1
+            return False
+        if result is None:
+            self.logger.error(f"Error: result is None. Domain '{domain}'/'{year}', url: '{url}'...")
+            self.errors.append(f"Error: result is None. Domain '{domain}'/'{year}', url: '{url}'...")
+            self.stats.failed_articles += 1
+            return False
+        if not isinstance(result, dict):
+            self.logger.error(f"Error: result not a dict. Domain '{domain}'/'{year}', url: '{url}'...")
+            self.stats.failed_articles += 1
+            return False
+        return True
 
 
     def process_results(self, article_jobs, article_results):
         for job_info, result in zip([job[0] for job in article_jobs], article_results):
-            domain, year, url = job_info
             self.stats.articles_processed += 1
-            if isinstance(result, Exception):
-                self.logger.error(
-                    f"Error scraping police article: '{domain}'/'{year}', url: '{url}' failed with exception: {result}")
-                self.stats.failed_articles += 1
-                continue
-            if result is None:
-                self.logger.error(f"Error: domain '{domain}'/'{year}', url: '{url}' returns None....")
-                self.errors.append(f"Error: domain '{domain}'/'{year}', url: '{url}' returns None")
-                self.stats.failed_articles += 1
-                continue
-            if not isinstance(result, dict):
+            domain, year, url = job_info
+            if not self.validate_result(result, domain, year, url):
                 continue
 
-            if not result['date']:  # Use bracket notation instead of .get() (?)
+            if not result['date']:
                 self.stats.missing_date += 1
             if not result['author']:
                 self.stats.missing_author += 1
@@ -87,7 +98,6 @@ class PoliceArticlesScraper(BaseScraper):
                 self.stats.with_pictures += 1
             if result['has_documents']:
                 self.stats.with_documents += 1
-
             self.stats.saved_articles += 1
         return
 
@@ -100,15 +110,16 @@ class PoliceArticlesScraper(BaseScraper):
             if match:
                 if date_text is not None:
                     self.logger.debug(f"Found multiple dates in '{url}'....")
-                date_text = match.group(0)
+                date_text = match.group(0).strip()
         if date_text is None:
             self.logger.debug(f"Failed getting the date from '{url}', '{domain}'::'{year}'")
+
         return date_text
 
 
     @staticmethod
     def get_author(content_ref):
-        author_text = ''
+        author_text = None
         for p in content_ref:
             text = p.get_text()
             if any(rank in text for rank in PIG_RANKS):
@@ -119,10 +130,11 @@ class PoliceArticlesScraper(BaseScraper):
                         author_text = line.strip()
                         break
                 break
+
         return author_text
 
 
-    def get_year(self, year, date_text, soup, url, domain):
+    def get_archive_category(self, year, date_text, soup, url, domain):
         if year == "non_years" and date_text is not None:
             year = date_text[-5:].strip('\n')
         elif year == "non_years" and date_text is None:
@@ -132,6 +144,7 @@ class PoliceArticlesScraper(BaseScraper):
                 year = drobek_text[-4:]
             else:
                 self.logger.error(f"No drobek found for '{url}', '{domain}'::'{year}....'")
+
         return year
 
 
@@ -144,6 +157,7 @@ class PoliceArticlesScraper(BaseScraper):
             tag_text = tag.get_text().strip()
             if len(tag_text) > 10:
                 content_text += tag_text + '\n'
+
         return content_text
 
 
@@ -158,6 +172,7 @@ class PoliceArticlesScraper(BaseScraper):
             non_text_elements.update(pictures_ref)
         if documents_ref:
             non_text_elements.update(documents_ref)
+
         return non_text_elements
 
 
@@ -169,6 +184,7 @@ class PoliceArticlesScraper(BaseScraper):
         documents_ref = soup.select(POLICE_SELECTOR['article_selectors']['documents'])
         p_tags = soup.select('div#content p')
 
+        # All articles need to have these elements
         required = {
             'title': title_ref,
             'description': description_ref,
@@ -184,7 +200,7 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     async def flush_buffer(self):
-        """ Writes only after we accumulate 30 articles.
+        """ Writes only after we accumulate 50 articles.
         """
         async with self.lock:
             # Read what we already saved
@@ -199,30 +215,29 @@ class PoliceArticlesScraper(BaseScraper):
                 current_results[domain][year].append(content)
 
             # Write the results back and clean the buffer
-            atomic_json_write(current_results, self.OUTPUT_FILE)  # todo do this inside the lock??
-            self.results_buffer: list[tuple[Domain, Year, ArticleResult]] = []
+            atomic_json_write(current_results, self.OUTPUT_FILE)
+            self.results_buffer: ResBuffer = []
         return
 
 
-    # todo write failed articles?
-    async def scrape_article(self,url, domain, year):
-        keywords = [key for key in URL_KEYWORDS + ARTICLE_KEYWORDS if key in url]
+    # todo write/save failed articles?
+    async def scrape_article(self, url: str, domain: str, year: str):
         try:
             soup = await self.get_soup(url)
             if soup is None:
                 self.logger.error(f"Failed scraping '{url}' from '{domain}'::'{year}")
                 return None
-
             elements = self.get_elements(soup, url, domain, year)
             if elements is None:
                 return None
             p_tags, title_ref, description_ref, content_ref, pictures_ref, documents_ref = elements
 
-            has_pictures = True if pictures_ref else False
-            has_documents = True if documents_ref else False
+            has_pictures = bool(pictures_ref)
+            has_documents = bool(documents_ref)
             date_text = self.get_date(content_ref, url, domain, year)
             author_text = self.get_author(content_ref)
-            year = self.get_year(year, date_text, soup, url, domain)
+            arch_cat = self.get_archive_category(year, date_text, soup, url, domain)
+            page_bytes = await self.fetch(url)
 
             # To get content_text, first define elements without the text
             non_text_elements = self.get_non_text_elements(
@@ -231,32 +246,41 @@ class PoliceArticlesScraper(BaseScraper):
             # Then add the text from all the other elements
             content_text = self.get_content_text(content_ref, non_text_elements,)
 
+            # Get keywords based on url AND the content
+            keywords = list(set(key for key in ALL_KEYWORDS
+                        if key in url or key in content_text)
+            )
+
             article_result: ArticleResult = {
+                'source': f'policie_{domain.replace(' ', '_').lower()}',
                 'title': title_ref[0].get_text(),
                 'url': url,
-                'year': year,
+                'archive_category': arch_cat,
                 'date': date_text,
                 'municipality': domain,
-                'keywords': keywords,
                 'author': author_text,
                 'description': description_ref[0].get_text().strip(),
                 'content': content_text,
                 'has_pictures': has_pictures,
                 'has_documents': has_documents,
+                'keywords': keywords,
+                'scraped_at': datetime.now(timezone.utc).isoformat(),
+                "html_base64": base64.b64encode(page_bytes).decode("ascii"),
             }
 
             # Append the result to the buffer
             self.logger.info(f"Got an article from '{url}', '{domain}'/'{year}'")
             self.results_buffer.append((domain, year, article_result))
+
             # If the buffer is large enough ==> write it
             if len(self.results_buffer) > self.results_buffer_threshold:
                 self.logger.info(f"Writing from a buffer...")
                 await self.flush_buffer()
+
             return article_result
 
-        except Exception as e:
-            self.logger.exception(f"Failed scraping '{url}' from '{domain}'::'{year}. Error message ==>")
-            self.logger.exception(e)
+        except Exception:
+            self.logger.exception(f"Error: failed with exception while scraping '{url}' from '{domain}'::'{year}")
             return None
 
 
@@ -285,7 +309,7 @@ class PoliceArticlesScraper(BaseScraper):
         self.logger.info(f"Processed {self.stats.articles_processed} articles, saved {self.stats.saved_articles}.")
         self.logger.info(f"{self.stats.failed_articles} articles failed.")
         self.logger.info(f"{self.stats.missing_date} are missing date, {self.stats.missing_author} are missing author.")
-        self.logger.info(f" {self.stats.with_pictures} have pictures and {self.stats.with_documents} have documents.")
+        self.logger.info(f"{self.stats.with_pictures} have pictures and {self.stats.with_documents} have documents.")
         self.logger.info(f"Exiting...")
 
 

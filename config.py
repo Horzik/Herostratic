@@ -50,6 +50,7 @@ METRO_IMG_FP = OUTPUT_DIR / ""
 URL_KEYWORDS = ['spray', 'sprey', 'sprej', 'graffiti', 'grafiti', 'grafity',
                 'vandal', 'cmaral', 'mural', 'street art', 'street-art']  # todo rename this variable (it's also used for article parsing)
 ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
+ALL_KEYWORDS = URL_KEYWORDS + ARTICLE_KEYWORDS
 DECODE_FORMATS = ['utf-8', 'windows-1250', 'iso-8859-2']
 EXCLUDE_ARCHIVE_KEYWORDS = ['nehody', 'násil', 'nasil']
 EXCLUDE_SOCIAL_KEYWORDS = ['mailto:','twitter.com/share', 'facebook.com/sharer', 'q=cHJuPTE%3d']

@@ -3,18 +3,17 @@ import json
 import logging
 import time
 from asyncio import gather
-from datetime import timedelta
 from bs4 import BeautifulSoup
+from datetime import timedelta
 
+from config import POLICE_ARCHIVES_FP, YEAR_LINKS_FP, LOG_DIR, ERRORS_LOG_FP
 from scraper.core import BaseScraper
 from scraper.police_tools.archives.municipality_strategies import MUNICIPALITY_PARSERS, MunicipalityParser
-from utils.logger import LogConfig, destroy
 from scraper.site_configs import BASE_POLICE_URL
-from config import POLICE_ARCHIVES_FP, YEAR_LINKS_FP, LOG_DIR, ERRORS_LOG_FP
+from utils.io_utils import atomic_json_write, CriticalDataError
+from utils.logger import LogConfig, destroy
 
 
-# Validation is 'all or nothing' => one failed link will fail the whole municipality
-# TODO try making the logging somewhat better
 class YearLinksScraper(BaseScraper):
     MODULE_NAME = "year_links"
     BASE_URL = BASE_POLICE_URL
@@ -26,12 +25,20 @@ class YearLinksScraper(BaseScraper):
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
         log_file_path=LOG_DIR / 'year_links.log',
-        log_errors_file_path=ERRORS_LOG_FP)
-
+        log_errors_file_path=ERRORS_LOG_FP
+    )
 
     def __init__(self):
         super().__init__()
         self.validated_links = 0
+
+
+    def write_results(self, data: dict | list) -> None:
+        try:
+            with self.lock:
+                atomic_json_write(data, self.OUTPUT_FILE)
+        except CriticalDataError:
+            raise
 
 
     @staticmethod
@@ -49,7 +56,7 @@ class YearLinksScraper(BaseScraper):
             Return the target sites and number of failed tasks.
         """
         sites = {}
-        failed_archives = 0 # todo return the actual failed archives (or use the self.errors?)
+        failed_arch_count = 0 # todo return the actual failed archives (or use the self.errors?)
         # Get the municipalities from tasks, check and process each result
         for (municipality, coro), arch_result in zip(archive_jobs, archive_results):
             if isinstance(arch_result, Exception) or arch_result is None:
@@ -57,7 +64,7 @@ class YearLinksScraper(BaseScraper):
                 self.logger.error(f"Task '{type(arch_result).__name__}', result:: {arch_result}")
                 self.errors.append(f"municipality '{municipality}' failed. Task::'{coro}'. Result:: '{arch_result}'")
                 self.pages_scraped += 1
-                failed_archives += 1
+                failed_arch_count += 1
                 continue
 
             municipality, year_links = arch_result
@@ -69,7 +76,7 @@ class YearLinksScraper(BaseScraper):
             self.pages_scraped += 1
 
         self.logger.debug(f"Results:: Found {len(sites)} sites:: {sites}")
-        return sites, failed_archives
+        return sites, failed_arch_count
 
 
     async def has_pagination(self, listing_url: str) -> bool:
@@ -97,7 +104,8 @@ class YearLinksScraper(BaseScraper):
         tasks = [
             self.has_pagination(listing_url)
             for _, urls in all_years.items()
-            for listing_url in urls]
+            for listing_url in urls
+        ]
         results = await gather(*tasks, return_exceptions=True)
 
         all_validated = True
@@ -161,32 +169,27 @@ class YearLinksScraper(BaseScraper):
             raise
 
 
-    async def prepare_tasks(self, data_fp) -> list:
+    async def mk_tasks(self, data_fp) -> list:
         with open(data_fp, "r") as a:
             archives: dict = json.load(a)
 
         return [
             (municipality, self.get_all_links(arch_url, municipality))
             for municipality, urls in archives.items()
-            for arch_url in urls]
-
-
-    async def scrape(self, tasks) -> list:
-        """ Override the class 'scrape' because we are adding the 'municipality' to tasks. """
-        return await gather(*[coro for _, coro in tasks],
-            return_exceptions=True)
+            for arch_url in urls
+        ]
 
 
     async def run(self) -> None:
         start_time = time.perf_counter()
         self.logger.info(f"Starting to scrape for archives...")
-        tasks = await self.prepare_tasks(self.INPUT_FILE)
+        tasks = await self.mk_tasks(self.INPUT_FILE)
         self.logger.info(f'Scraping {len(tasks)} archive links....')
 
         results = await gather(*tasks, return_exceptions=True)
 
         sites, failed_arch_count = self.process_archive_results(tasks, results)
-        if failed_arch_count < len(sites):
+        if sites:
             self.write_results(sites)
 
         duration = timedelta(seconds=time.perf_counter() - start_time)

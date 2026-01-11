@@ -3,15 +3,17 @@ import logging
 import xml.etree.ElementTree as ET
 from asyncio import gather
 
-from scraper.core import BaseScraper
-from utils.io_utils import async_json_read, parse_xml_tree
-from utils.logger import LogConfig, destroy
 from config import (
     LOG_DIR, ERRORS_LOG_FP, ARTICLES_FP, SITEMAPS_FP,
     SITEMAP_INDEX_EL, URL_EL, LOC_EL, URL_KEYWORDS)
+from scraper.core import BaseScraper
+from utils.io_utils import async_json_read, parse_xml_tree, atomic_json_write, CriticalDataError
+from utils.logger import LogConfig, destroy
 
-# Unlike the original this writes all results at the end (not for each domain)
+
 class ScrapeSitemapArticles(BaseScraper):
+    """ Writes all the results at the end.
+    """
     MODULE_NAME = 'SITEMAP_ARTICLES'
     BASE_URL = None
     INPUT_FILE = SITEMAPS_FP
@@ -24,6 +26,15 @@ class ScrapeSitemapArticles(BaseScraper):
         log_errors_file_path=ERRORS_LOG_FP
     )
 
+
+    def write_results(self, data: dict | list) -> None:
+        try:
+            with self.lock:
+                atomic_json_write(data, self.OUTPUT_FILE)
+        except CriticalDataError:
+            raise
+
+
     async def extract_sitemap_urls(self, root: ET.Element) -> list[str]:
         sitemap_urls = root.findall(SITEMAP_INDEX_EL)
         tasks = [self.parser(url=loc.text) for loc in sitemap_urls]
@@ -31,6 +42,7 @@ class ScrapeSitemapArticles(BaseScraper):
 
         all_urls = [url for sublist in result for url in sublist]
         return all_urls
+
 
     def extract_article_urls(self, root: ET.Element):
         urls = []
@@ -44,6 +56,7 @@ class ScrapeSitemapArticles(BaseScraper):
                     urls.append(url.text)
         self.logger.info(f"Found {len(urls)} urls")
         return urls
+
 
     async def parser(self, url: str) -> list[str]:
         """ Main parsing function for parsing the robots.txt file.
@@ -60,6 +73,7 @@ class ScrapeSitemapArticles(BaseScraper):
         else:
             self.logger.warning(f"Unknown root tag: {root.tag}")
             return []
+
 
     async def scrape_domain(self, domain: str, sitemaps: list[str]):
         self.logger.info(f"Processing {domain}")
@@ -92,7 +106,8 @@ class ScrapeSitemapArticles(BaseScraper):
     async def prep_tasks(self, data_fp) -> list:
         sitemaps_data: dict = await async_json_read(data_fp)
         return [self.scrape_domain(domain, sitemaps)
-                for domain, sitemaps in sitemaps_data.items()]
+                for domain, sitemaps in sitemaps_data.items()
+        ]
 
 
     async def run(self):
@@ -101,12 +116,14 @@ class ScrapeSitemapArticles(BaseScraper):
         results = self.process_results(article_results)
         self.write_results(results)
 
+
 async def main():
     async with ScrapeSitemapArticles() as scr:
         try:
             await scr.run()
         finally:
             destroy()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
