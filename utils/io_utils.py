@@ -24,34 +24,35 @@ logger = get_logger('io_utils')
 
 
 class CriticalDataError(Exception):
-    """ We failed at the same time as the only time we write? """
+    """ Use if writing goes wrong.
+    """
     pass
 
 
 async def async_json_read(fp: str) -> dict:
-    # todo this only seems to act as a dict reader, rename or idk
-    """
-        Helper to read json asynchronously \n
-        Return the result OR return an empty dict
-
+    """ Helper to read json asynchronously \n
+        Return the result OR return an empty dict.
     """
     try:
         async with aiofiles.open(fp, 'r', encoding='utf-8') as a:
             content = await a.read()
             loop = asyncio.get_running_loop()
             data = await loop.run_in_executor(None, json.loads, content)
-    # If no file, start with empty object
-    except (json.JSONDecodeError, FileNotFoundError):
-        logger.info(f"Failed to open {fp}, creating empty dict...")
-        data = {}
+        return data
 
-    return data
+    except FileNotFoundError:
+        logger.info(f"'{fp}' not found, returning empty dict...")
+        return {}
+    except json.JSONDecodeError:
+        logger.info(f"'{fp}' is corrupted, returning empty dict...")
+        return {}
+
 
 
 # todo add file creation if not existing?
 def atomic_json_write(data: dict | list, fp: str | Path):
     """ Helper to write json 'atomically': first writes to a tmp file
-        and only then to the target file (cleans up the tmp file afterward)
+        and only then to the target file (cleans up the tmp file afterward).
     """
     try:
         tmp_name = None

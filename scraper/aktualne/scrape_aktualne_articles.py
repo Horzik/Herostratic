@@ -1,6 +1,8 @@
+import base64
 import json
 from asyncio.tasks import gather
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import asyncio
 import logging
 from typing import TypedDict
@@ -8,7 +10,7 @@ from typing import TypedDict
 import aiofiles
 from bs4 import BeautifulSoup
 
-from config import LOG_DIR, ERRORS_LOG_FP, AKT_ART_FP, AKT_RESULTS_FP
+from config import LOG_DIR, ERRORS_LOG_FP, AKT_ART_FP, AKT_RESULTS_FP, ALL_KEYWORDS
 from scraper.core import BaseScraper
 from utils.io_utils import atomic_json_write
 from utils.logger import LogConfig, destroy
@@ -18,17 +20,23 @@ from utils.logger import LogConfig, destroy
 class ScrapingStats:
     saved_articles: int = 0
 
-
+# TODO add "has_pictures", can be either "iframe" or 'article__photo article__photo--opener'/'infobox'
+# TODO keywords *could* be a 'taglist' directly in the article
 class ScrapeResult(TypedDict):
+    source: str
     url: str
     title: str
     author: str | None
     date: str | None
-    text: str
+    content: str
+    keywords: list[str]
+    scraped_at: str
+    html_base64: str
 
 
 class AktualneArticlesScraper(BaseScraper):
-    """ WIP Scrapes aktualne article links for data. """
+    """ Scrapes aktualne article links.
+    """
     MODULE_NAME = 'scrape_aktualne_articles'
     BASE_URL = 'https://zpravy.aktualne.cz'
     INPUT_FILE = AKT_ART_FP
@@ -97,17 +105,26 @@ class AktualneArticlesScraper(BaseScraper):
         title_text = title_el.text.strip()
 
         author_el = soup.select_one('a.author__name')
-        author_text = author_el.text.strip() if author_el else 'no_author' # TODO fails everytime
-        date_el = soup.select_one('a.author__date')
-        date_text = date_el.text.strip() if date_el else 'no_date' # TODO fails everytime
+        author_text = author_el.text.strip() if author_el else 'no_author'
+        date_el = soup.select_one('div.author__date')
+        date_text = date_el.text.strip() if date_el else 'no_date'
         content_text = await self.get_content_text(soup, url)
+        keywords = list(set(key for key in ALL_KEYWORDS
+                        if key in url or key in content_text)
+        )
+        page_bytes = await self.fetch(url)
 
-        result = ScrapeResult(
-            url=url,
-            title=title_text,
-            author=author_text,
-            date=date_text,
-            text=content_text,)
+        result: ScrapeResult = {
+            'source': 'aktualne',
+            'url': url,
+            'title': title_text,
+            'author': author_text,
+            'date': date_text,
+            'content': content_text,
+            'keywords': keywords,
+            'scraped_at': datetime.now(timezone.utc).isoformat(),
+            'html_base64': base64.b64encode(page_bytes).decode("ascii"),
+        }
 
         self.logger.info(f"Finished parsing url: '{url}'...")
         return result
@@ -121,7 +138,8 @@ class AktualneArticlesScraper(BaseScraper):
 
 
     async def scrape_article(self, url: str):
-        """ The main task. """
+        """ The main task.
+        """
         result = await self.parse_html(url)
         await self.add_result(result)
         return

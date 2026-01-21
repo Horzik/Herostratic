@@ -29,21 +29,24 @@ HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
 DISTRICTS_FP = OUTPUT_DIR / "districts.txt"
 
-# Sites FPsa
+# Sites FPs
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
+FAILED_POLICE_RESULTS_FP = OUTPUT_DIR / "failed_police_results.txt"
 YEAR_LINKS_FP = OUTPUT_DIR / "year_links1.json"
 JIHOMOR_LINKS_FP = OUTPUT_DIR / "jihomor_links.json"
 
 AKTUALNE_SITES_FP = INPUT_DIR / "aktualne_sites.txt"
 AKT_ART_FP = OUTPUT_DIR / "aktualne.txt"
 AKT_RESULTS_FP = OUTPUT_DIR / "aktualne_results.json"
+FAILED_AKT_RESULTS_FP = OUTPUT_DIR / "failed_aktualne_results.txt"
 
 METRO_SITE_FP = INPUT_DIR / "metro_site.txt"
 METRO_PATHS_FP = OUTPUT_DIR / "metro_paths.txt"
 METRO_ARTICLES_FP = OUTPUT_DIR / "metro_articles.json"
 METRO_RESULTS_FP = OUTPUT_DIR / "metro_results.json"
+FAILED_METRO_RESULTS_FP = OUTPUT_DIR / "failed_metro_results.txt"
 METRO_IMG_FP = OUTPUT_DIR / ""
 
 # Parsing and scraping filters and keywords

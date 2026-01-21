@@ -1,26 +1,27 @@
 import asyncio
 import re
 from abc import ABC, abstractmethod
-from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag, ResultSet
+from logging import Logger
+from urllib.parse import urljoin
 
 from config import EXCLUDE_ARCHIVE_KEYWORDS, EXCLUDE_SOCIAL_KEYWORDS
+from scraper.core import BaseScraper
 from scraper.site_configs import BASE_POLICE_URL, POLICE_ARCHIVE_SELECTORS, POLICE_SELECTOR, MUNICIPALITY_SELECTORS, \
     TABLE_SELECTORS
-
 
 
 class MunicipalityParser(ABC):
     ARCHIVE_SELECTOR = POLICE_ARCHIVE_SELECTORS['content_archiv']
     BASE_URL = BASE_POLICE_URL
-    EXCL_ARCH_WORD = 'archiv'
+    EXCL_ARCH_WORD = 'archiv' # todo revisit this, there was a legit reason for this but make sure it's correct
 
     def __init__(self, scraper, municipality, url, soup, logger):
-        self.scraper = scraper
-        self.municipality = municipality
-        self.url = url
-        self.soup = soup
-        self.logger = logger
+        self.scraper: BaseScraper = scraper
+        self.municipality: str = municipality
+        self.url: str = url
+        self.soup: BeautifulSoup = soup
+        self.logger: Logger = logger
 
 
     @abstractmethod
@@ -104,7 +105,8 @@ class MunicipalityParser(ABC):
 
 
     def select_years_table(self, municipality: str, soup: BeautifulSoup) -> ResultSet[Tag] | None:
-        """ Find the correct years table element on the archive page """
+        """ Find the correct years table element on the archive page.
+        """
         for muni_key, selector in MUNICIPALITY_SELECTORS.items():
             if muni_key in municipality:
                 years_table = soup.select(selector)
@@ -130,8 +132,7 @@ class MunicipalityParser(ABC):
 
 
     async def parse_jihomor_archive(self, soup: BeautifulSoup) -> dict:
-        """
-            Separate parsing strategy because we love the police HTML. \n
+        """ Separate parsing strategy because we love the police HTML. \n
             Get the year table, and crawl through to get the years links. \n
             First link => Second link => Multiple urls per year.
         """
@@ -198,7 +199,8 @@ class AllLinksParser(MunicipalityParser):
 
 
 class PlzenParser(AllLinksParser):
-    """Plzen has years directly on the main page, no archive fetch needed"""
+    """ Plzen has years directly on the main page, no archive fetch needed.
+    """
     async def get_year_links(self) -> dict:
         years_table = self.select_years_table(self.municipality, self.soup)
         return self.process_year_elements(years_table, self.url)
@@ -289,7 +291,8 @@ class KraloveParser(OnlyYearLinksParser):
 
 
 class PardubicParser(AllLinksParser):
-    """Pardubicky has only the year links, not archive fetch needed."""
+    """ Pardubicky has only the year links, not archive fetch needed.
+    """
     async def get_non_year_links(self) -> list:
         pardubic_non_years = []
         el_list = self.soup.select('div#content ul a')
@@ -298,7 +301,8 @@ class PardubicParser(AllLinksParser):
 
 
 class VysoParser(AllLinksParser):
-    """Vyso has years directly on the main page, no archive fetch needed"""
+    """ Vyso has years directly on the main page, no archive fetch needed.
+    """
     async def get_year_links(self) -> dict:
         years_table = self.select_years_table(self.municipality, self.soup)
         return self.process_year_elements(years_table, self.url)
@@ -316,7 +320,8 @@ class VysoParser(AllLinksParser):
 
 
 class JihomorParser(AllLinksParser):
-    """Jiho has years directly on the main page, and is kinda fucked (hence 'parse_jihomor_archive')"""
+    """ Jiho has years directly on the main page, and is kinda fucked (hence 'parse_jihomor_archive').
+    """
     async def get_year_links(self):
         arch_element = self.soup.select_one(POLICE_ARCHIVE_SELECTORS['content_archiv'])
         arch_link = urljoin(BASE_POLICE_URL, arch_element.get('href').lstrip('/'))
@@ -371,7 +376,6 @@ class MoravskoslezParser(AllLinksParser):
         return list(set(moravskoslez_non_years))
 
 
-# todo is this correct
 MUNICIPALITY_PARSERS = {
     "Informační": OnlyYearLinksParser,
     "hl. m. Praha": OnlyYearLinksParser,

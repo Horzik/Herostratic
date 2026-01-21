@@ -1,13 +1,15 @@
-import json
-import asyncio
-import logging
 import aiofiles
+import asyncio
+import base64
+import json
+import logging
 from asyncio.tasks import gather
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
+from datetime import timezone, datetime
 from typing import TypedDict
 
-from config import LOG_DIR, ERRORS_LOG_FP, METRO_ARTICLES_FP, METRO_RESULTS_FP, METRO_IMG_FP
+from config import LOG_DIR, ERRORS_LOG_FP, METRO_ARTICLES_FP, METRO_RESULTS_FP, METRO_IMG_FP, ALL_KEYWORDS
 from scraper.core import BaseScraper
 from utils.io_utils import atomic_json_write
 from utils.logger import LogConfig, destroy
@@ -18,16 +20,17 @@ class ScrapingStats:
     saved_articles: int = 0
     all_tasks: int = 0
 
-
-class ScrapeResult(TypedDict):
+class ArticleResult(TypedDict):
+    source: str
     url: str
     title: str
     region: str
     author: str | None
     date: str | None
-    text: str
-    # imgs: list[str] | None
-
+    content: str
+    keywords: set[str]
+    scraped_at: str
+    html_base64: str
 
 class MetroArticleScraper(BaseScraper):
     """ WIP Scrapes aktualne article links for data. """
@@ -42,8 +45,8 @@ class MetroArticleScraper(BaseScraper):
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
         log_file_path=LOG_DIR / 'scrape_metro_articles.log',
-        log_errors_file_path=ERRORS_LOG_FP)
-
+        log_errors_file_path=ERRORS_LOG_FP
+    )
 
     def __init__(self):
         super().__init__()
@@ -159,34 +162,42 @@ class MetroArticleScraper(BaseScraper):
         return date_text
 
 
-    async def parse_html(self, url: str, region: str) -> ScrapeResult:
+    async def parse_html(self, url: str, region: str) -> ArticleResult:
         soup = await self.get_soup(url)
         if not soup:
             self.logger.error(f"Error making the soup for url: '{url}'")
-            self.errors.append("fError parsing '{url}', ")
+            self.errors.append(f"Error parsing '{url}', ")
             raise Exception
 
         title_text = self.get_title_text(soup, url)
         authors_text = self.get_authors(soup)
         date_text = self.get_date_text(soup)
         content_text = await self.get_content_text(soup, url)
-        # imgs = await self.get_imgs(soup)
 
-        result = ScrapeResult(
-            url=url,
-            title=title_text,
-            region=region,
-            author=authors_text,
-            date=date_text,
-            text=content_text,
-            # imgs=imgs
-        )
+        keywords_from_article = {
+            key for key in ALL_KEYWORDS
+            if key in url or key in content_text}
+
+        page_bytes = await self.fetch(url) # For the base64 html
+
+        result: ArticleResult = {
+            'source': 'metro',
+            'url': url,
+            'title': title_text,
+            'region': region,
+            'author': authors_text,
+            'date': date_text,
+            'content': content_text,
+            'keywords': keywords_from_article,
+            'scraped_at': datetime.now(timezone.utc).isoformat(),
+            "html_base64": base64.b64encode(page_bytes).decode("ascii"),
+        }
 
         self.logger.info(f"Finished parsing url: '{url}'...")
         return result
 
 
-    async def add_result(self, result: ScrapeResult):
+    async def add_result(self, result: ArticleResult):
         # TODO add the regions?
         async with self.lock:
             if len(self.res_buffer) > self.buffer_threshold:

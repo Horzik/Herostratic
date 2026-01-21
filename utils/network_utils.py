@@ -33,7 +33,13 @@ def create_session():
 
 
 # Function to fetch target url and return its bytes
-async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False, verify=True) -> bytes | None:
+async def get_bytes(
+    url: str,
+    session: aiohttp.ClientSession,
+    semaphore: asyncio.Semaphore,
+    gov_site=False,
+    verify=True
+) -> bytes | None:
     logger = get_logger('network')
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:

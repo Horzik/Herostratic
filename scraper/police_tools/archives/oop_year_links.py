@@ -34,6 +34,8 @@ class YearLinksScraper(BaseScraper):
 
 
     def write_results(self, data: dict | list) -> None:
+        """ Wraps the 'atomic_write' func in the class lock.
+        """
         try:
             with self.lock:
                 atomic_json_write(data, self.OUTPUT_FILE)
@@ -43,7 +45,7 @@ class YearLinksScraper(BaseScraper):
 
     @staticmethod
     def get_parser_for_municipality(municipality: str) -> type[MunicipalityParser]:
-        """ Get parser class for municipality, raises if not found.
+        """ Get the specific parser class for a municipality.
         """
         for key, parser_class in MUNICIPALITY_PARSERS.items():
             if key in municipality:
@@ -124,7 +126,7 @@ class YearLinksScraper(BaseScraper):
         return all_validated
 
 
-    async def parse_municipality(self, municipality, url, soup) -> dict[str, list[str]]:
+    async def parse_municipality(self, municipality: str, url: str, soup: BeautifulSoup) -> dict[str, list[str]]:
         parser_class = self.get_parser_for_municipality(municipality)
         parser = parser_class(self, municipality, url, soup, self.logger)
         return await parser.parse()
@@ -196,8 +198,7 @@ class YearLinksScraper(BaseScraper):
         self.logger.info(
             f"Finished in {duration}, "
             f"success for {self.pages_scraped - failed_arch_count}/{self.pages_scraped} targets, "
-            f"validated {self.validated_links} links, exiting...") # todo this can be misleading if any muni fails
-
+            f"validated {self.validated_links} links, exiting...")
 
 async def main() -> None:
     async with YearLinksScraper() as scr:
@@ -205,7 +206,6 @@ async def main() -> None:
             await scr.run()
         finally:
             destroy()
-
 
 if __name__ == '__main__':
     asyncio.run(main())

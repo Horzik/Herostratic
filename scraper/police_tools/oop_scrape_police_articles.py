@@ -3,11 +3,13 @@ import base64
 import logging
 import re
 import time
+from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from datetime import timedelta, datetime, timezone
 from typing import TypedDict
 
-from config import POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP, PIG_RANKS, DATE_REGEX, ALL_KEYWORDS
+from config import (POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP,
+                    PIG_RANKS, DATE_REGEX, ALL_KEYWORDS, FAILED_POLICE_RESULTS_FP)
 from scraper.core import BaseScraper
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.io_utils import async_json_read, atomic_json_write
@@ -16,9 +18,9 @@ from utils.logger import LogConfig, destroy
 
 class ArticleResult(TypedDict):
     source: str
-    title: str
+    archive_category: str  # Can be either the year or district/city
     url: str
-    archive_category: str # Can be either the year or district/city
+    title: str
     date: str | None
     municipality: str
     author: str | None
@@ -44,11 +46,13 @@ type Domain = str
 type Year = str
 type ResBuffer = list[tuple[Domain, Year, ArticleResult]]
 
+# TODO add type hints, make it work as the cron pipeline
 class PoliceArticlesScraper(BaseScraper):
     MODULE_NAME = 'scrape_police_articles'
     BASE_URL = BASE_POLICE_URL
     INPUT_FILE = POLICE_ARTICLES_FP
     OUTPUT_FILE = POLICE_RESULTS_FP
+    FAILED_FILE = FAILED_POLICE_RESULTS_FP
     GOV_SITE = True
     SEMAPHORE_COUNT = 10
     LOG_CONFIG = LogConfig(
@@ -61,33 +65,46 @@ class PoliceArticlesScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.stats = ScrapingStats()
+        self.initial_results: set[str] = set()
         self.results_buffer: ResBuffer = []
         self.results_buffer_threshold = 50
 
 
-    def validate_result(self, result, domain, year, url) -> bool:
+    async def write_failed_article(self, res_url):
+        async with self.lock:
+            with open(FAILED_POLICE_RESULTS_FP, 'a') as f:
+                f.write(res_url + '\n')
+
+
+    async def validate_result(self, result, domain, year, url) -> bool:
+        if result is None:
+            # todo unify these error logs
+            self.logger.error(f"Error: result is None. Domain '{domain}'/'{year}', url: '{url}'...")
+            self.errors.append(f"Error: result is None. Domain '{domain}'/'{year}', url: '{url}'...")
+            self.stats.failed_articles += 1
+            await self.write_failed_article(url)
+            return False
         if isinstance(result, Exception):
             self.logger.error(
                 f"Error scraping police article: '{domain}'/'{year}', url: '{url}' failed with exception: {result}")
             self.stats.failed_articles += 1
-            return False
-        if result is None:
-            self.logger.error(f"Error: result is None. Domain '{domain}'/'{year}', url: '{url}'...")
-            self.errors.append(f"Error: result is None. Domain '{domain}'/'{year}', url: '{url}'...")
-            self.stats.failed_articles += 1
+            await self.write_failed_article(url)
             return False
         if not isinstance(result, dict):
             self.logger.error(f"Error: result not a dict. Domain '{domain}'/'{year}', url: '{url}'...")
             self.stats.failed_articles += 1
+            await self.write_failed_article(url)
             return False
+
         return True
 
 
-    def process_results(self, article_jobs, article_results):
-        for job_info, result in zip([job[0] for job in article_jobs], article_results):
+    async def process_results(self, article_jobs, article_results):
+        for job_data, result in zip([job[0] for job in article_jobs], article_results):
             self.stats.articles_processed += 1
-            domain, year, url = job_info
-            if not self.validate_result(result, domain, year, url):
+            domain, year, url = job_data
+
+            if not await self.validate_result(result, domain, year, url):
                 continue
 
             if not result['date']:
@@ -176,7 +193,7 @@ class PoliceArticlesScraper(BaseScraper):
         return non_text_elements
 
 
-    def get_elements(self, soup, url, domain, year):
+    def get_elements(self, soup: BeautifulSoup, url: str, domain: str, year: str):
         title_ref = soup.select(POLICE_SELECTOR['article_selectors']['title'])
         description_ref = soup.select(POLICE_SELECTOR['article_selectors']['description'])
         content_ref = soup.select(POLICE_SELECTOR['article_selectors']['content'])
@@ -220,53 +237,66 @@ class PoliceArticlesScraper(BaseScraper):
         return
 
 
-    # todo write/save failed articles?
+    async def fetch_page(self, url: str, domain: str, year: str):
+        soup = await self.get_soup(url)
+        if soup is None:
+            self.logger.error(f"Failed fetching soup for '{url}' from '{domain}'::'{year}")
+            return None
+
+        elements = self.get_elements(soup, url, domain, year)
+        if elements is None:
+            self.logger.error(f"Failed parsing elements for '{url}' from '{domain}'::'{year}")
+            return None
+
+        return soup, elements
+
+
+    async def parse_html(self, url: str, domain: str, year: str):
+        soup, elements = await self.fetch_page(url, domain, year)
+        p_tags, title_ref, description_ref, content_ref, pictures_ref, documents_ref = elements
+
+        has_pictures = bool(pictures_ref)
+        has_documents = bool(documents_ref)
+        date_text = self.get_date(content_ref, url, domain, year)
+        author_text = self.get_author(content_ref)
+        arch_cat = self.get_archive_category(year, date_text, soup, url, domain)
+        page_bytes = await self.fetch(url)  # For 'html_base64'
+
+        # To get content_text, first define elements without the text
+        non_text_elements = self.get_non_text_elements(
+            title_ref, description_ref, pictures_ref, documents_ref
+        )
+        # Then add the text from all the other elements
+        content_text = self.get_content_text(content_ref, non_text_elements, )
+
+        # Get keywords based on url AND the content
+        keywords = list(set(key for key in ALL_KEYWORDS
+                            if key in url or key in content_text)
+        )
+
+        article_result: ArticleResult = {
+            'source': f'policie_{domain.replace(' ', '_').lower()}',
+            'archive_category': arch_cat,
+            'url': url,
+            'title': title_ref[0].get_text(),
+            'date': date_text,
+            'municipality': domain,
+            'author': author_text,
+            'description': description_ref[0].get_text().strip(),
+            'content': content_text,
+            'has_pictures': has_pictures,
+            'has_documents': has_documents,
+            'keywords': keywords,
+            'scraped_at': datetime.now(timezone.utc).isoformat(),
+            "html_base64": base64.b64encode(page_bytes).decode("ascii"),
+        }
+
+        return article_result
+
+
     async def scrape_article(self, url: str, domain: str, year: str):
         try:
-            soup = await self.get_soup(url)
-            if soup is None:
-                self.logger.error(f"Failed scraping '{url}' from '{domain}'::'{year}")
-                return None
-            elements = self.get_elements(soup, url, domain, year)
-            if elements is None:
-                return None
-            p_tags, title_ref, description_ref, content_ref, pictures_ref, documents_ref = elements
-
-            has_pictures = bool(pictures_ref)
-            has_documents = bool(documents_ref)
-            date_text = self.get_date(content_ref, url, domain, year)
-            author_text = self.get_author(content_ref)
-            arch_cat = self.get_archive_category(year, date_text, soup, url, domain)
-            page_bytes = await self.fetch(url)
-
-            # To get content_text, first define elements without the text
-            non_text_elements = self.get_non_text_elements(
-                title_ref, description_ref, pictures_ref, documents_ref
-            )
-            # Then add the text from all the other elements
-            content_text = self.get_content_text(content_ref, non_text_elements,)
-
-            # Get keywords based on url AND the content
-            keywords = list(set(key for key in ALL_KEYWORDS
-                        if key in url or key in content_text)
-            )
-
-            article_result: ArticleResult = {
-                'source': f'policie_{domain.replace(' ', '_').lower()}',
-                'title': title_ref[0].get_text(),
-                'url': url,
-                'archive_category': arch_cat,
-                'date': date_text,
-                'municipality': domain,
-                'author': author_text,
-                'description': description_ref[0].get_text().strip(),
-                'content': content_text,
-                'has_pictures': has_pictures,
-                'has_documents': has_documents,
-                'keywords': keywords,
-                'scraped_at': datetime.now(timezone.utc).isoformat(),
-                "html_base64": base64.b64encode(page_bytes).decode("ascii"),
-            }
+            article_result = await self.parse_html(url, domain, year)
 
             # Append the result to the buffer
             self.logger.info(f"Got an article from '{url}', '{domain}'/'{year}'")
@@ -279,31 +309,51 @@ class PoliceArticlesScraper(BaseScraper):
 
             return article_result
 
-        except Exception:
-            self.logger.exception(f"Error: failed with exception while scraping '{url}' from '{domain}'::'{year}")
+        except Exception as e:
+            self.logger.error(f"Error: failed with exception while scraping '{url}' from '{domain}'::'{year}...\n {e}")
             return None
 
+
+    async def get_existing_urls(self) -> set[str]:
+        """ Used for deduping results, ie to not re-add a result which we already have.
+        """
+        initial_results_urls = set()
+        results_dict = await async_json_read(self.OUTPUT_FILE)
+        for domain, years in results_dict.items():
+            for year, articles in years.items():
+                for article in articles:
+                    initial_results_urls.add(article['url'])
+
+        self.logger.info(f"Initial results urls: {initial_results_urls}")
+        return initial_results_urls
+
+
+    async def mk_tasks(self):
+        # Get a set of urls of already scraped articles, so we don't re-scrape what we already have
+        self.initial_results = await self.get_existing_urls()
+
+        articles_links = await async_json_read(self.INPUT_FILE)
+        article_jobs = [
+            ((domain, year, url), self.scrape_article(url, domain, year))  # ((metadata), coroutine)
+            for domain, years_dict in articles_links.items()
+            for year, urls_list in years_dict.items()
+            for url in urls_list if url not in self.initial_results
+        ]
+
+        return article_jobs
 
     async def scraper(self):
         timer_start = time.time()
 
-        articles_links = await async_json_read(self.INPUT_FILE)
-        article_jobs = [
-            ((domain, year, url), self.scrape_article(url, domain, year)) # ((metadata), coroutine)
-            for domain, years_dict in articles_links.items()
-            for year, urls_list in years_dict.items()
-            for url in urls_list
-        ]
-        article_results = await asyncio.gather(*[coro for _, coro in article_jobs],
-            return_exceptions=True
-        )
+        article_jobs = await self.mk_tasks()
+        article_results = await asyncio.gather(*[coro for _, coro in article_jobs], return_exceptions=True)
+        await self.process_results(article_jobs, article_results)
 
-        self.process_results(article_jobs, article_results)
-        await self.flush_buffer() # Write the remaining results
+        if len(self.results_buffer) > 0: # Write any remaining results
+            await self.flush_buffer()
 
         timer_end = time.time()
-        elapsed_seconds = timer_end - timer_start
-        formatted_time = str(timedelta(seconds=elapsed_seconds))
+        formatted_time = str(timedelta(seconds=timer_end - timer_start))
 
         self.logger.info(f"Finished scraping in {formatted_time}")
         self.logger.info(f"Processed {self.stats.articles_processed} articles, saved {self.stats.saved_articles}.")
