@@ -12,7 +12,8 @@ from utils.logger import LogConfig, destroy
 
 
 class ScrapeSitemapArticles(BaseScraper):
-    """ Writes all the results at the end.
+    """ Looks for a sitemap on the target url, which we could use to scrape articles directly. \n
+        Writes all the results at the end.
     """
     MODULE_NAME = 'SITEMAP_ARTICLES'
     BASE_URL = None
@@ -106,8 +107,7 @@ class ScrapeSitemapArticles(BaseScraper):
     async def prep_tasks(self, data_fp) -> list:
         sitemaps_data: dict = await async_json_read(data_fp)
         return [self.scrape_domain(domain, sitemaps)
-                for domain, sitemaps in sitemaps_data.items()
-        ]
+                for domain, sitemaps in sitemaps_data.items()]
 
 
     async def run(self):

@@ -91,8 +91,8 @@ test_urls = {
 
 async def parse_jihomor_archive(soup: BeautifulSoup, session: ClientSession, semaphore: Semaphore, domain):
     """
-        Get the year table, and crawl through to get the years links. \n
-        First link => Second link => Multiple urls per year.
+    Get the year table, and crawl through to get the years links. \n
+    First link => Second link => Multiple urls per year.
     """
     jihomor_years = {}
     next_link = BASE_POLICE_URL + soup.select_one('div.infobox a').get('href')

@@ -252,10 +252,11 @@ class ListingsParser(BaseScraper):
         (saved_articles, failed_articles, articles_processed, total_pages) = logs
         self.logger.info(f"Processed {articles_processed} articles from {total_pages} pages, saved {saved_articles}, failed {failed_articles}")
         urls_after_scrape = await self.get_existing_urls()
-        return bool(len(existing_urls) == len(urls_after_scrape))
+        found_new_articles = len(existing_urls) != len(urls_after_scrape)
+        return found_new_articles
 
 
-async def main(cron_max_pages: int | None = None):
+async def get_police_articles(cron_max_pages: int | None = None):
     async with ListingsParser() as ap:
         start = time.perf_counter()
         try:
@@ -274,4 +275,4 @@ if __name__ == "__main__":
 
     # How many pages of article listings should the scraper check, default to 5 if a cron job
     max_pages = args.max_pages if args.max_pages else (5 if run_as_cron else None)
-    asyncio.run(main(cron_max_pages=max_pages))
+    asyncio.run(get_police_articles(cron_max_pages=max_pages))

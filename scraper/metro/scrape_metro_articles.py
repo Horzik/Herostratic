@@ -20,6 +20,7 @@ class ScrapingStats:
     saved_articles: int = 0
     all_tasks: int = 0
 
+# todo add "has_pictures"
 class ArticleResult(TypedDict):
     source: str
     url: str
@@ -30,6 +31,7 @@ class ArticleResult(TypedDict):
     content: str
     keywords: set[str]
     scraped_at: str
+    # has_pictures: bool
     html_base64: str
 
 class MetroArticleScraper(BaseScraper):

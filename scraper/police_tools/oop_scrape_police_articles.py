@@ -363,7 +363,7 @@ class PoliceArticlesScraper(BaseScraper):
         self.logger.info(f"Exiting...")
 
 
-async def main():
+async def scrape_police_articles():
     async with PoliceArticlesScraper() as ps:
         try:
             await ps.scraper()
@@ -372,4 +372,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(scrape_police_articles())

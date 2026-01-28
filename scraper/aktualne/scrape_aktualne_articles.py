@@ -31,6 +31,7 @@ class ScrapeResult(TypedDict):
     content: str
     keywords: list[str]
     scraped_at: str
+    # has_pictures: bool
     html_base64: str
 
 
