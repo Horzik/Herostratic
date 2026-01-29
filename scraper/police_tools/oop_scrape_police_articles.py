@@ -46,7 +46,7 @@ type Domain = str
 type Year = str
 type ResBuffer = list[tuple[Domain, Year, ArticleResult]]
 
-# TODO add type hints, make it work as the cron pipeline
+# TODO domain/municipality/archive_category are VAGUE, make it make sense
 class PoliceArticlesScraper(BaseScraper):
     MODULE_NAME = 'scrape_police_articles'
     BASE_URL = BASE_POLICE_URL

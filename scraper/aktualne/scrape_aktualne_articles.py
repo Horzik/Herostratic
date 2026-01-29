@@ -106,9 +106,9 @@ class AktualneArticlesScraper(BaseScraper):
         title_text = title_el.text.strip()
 
         author_el = soup.select_one('a.author__name')
-        author_text = author_el.text.strip() if author_el else 'no_author'
+        author_text = author_el.text.strip() if author_el else None
         date_el = soup.select_one('div.author__date')
-        date_text = date_el.text.strip() if date_el else 'no_date'
+        date_text = date_el.text.strip() if date_el else None
         content_text = await self.get_content_text(soup, url)
         keywords = list(set(key for key in ALL_KEYWORDS
                         if key in url or key in content_text)
