@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS article_keywords (
     PRIMARY KEY (article_id, keyword_id)
 );
 
+CREATE TABLE IF NOT EXISTS article_html (
+    article_id INTEGER PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
+    html_base64 TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS article_files (
     id SERIAL PRIMARY KEY,
     article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
@@ -46,7 +51,6 @@ CREATE TABLE IF NOT EXISTS article_files (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS article_html (
-    article_id INTEGER PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
-    html_base64 TEXT NOT NULL
-);
+CREATE INDEX idx_articles_location_id ON articles(location_id);
+CREATE INDEX idx_article_keyword_id ON article_keywords(keyword_id);
+CREATE INDEX idx_articles_search_vector ON articles USING GIN(search_vector);

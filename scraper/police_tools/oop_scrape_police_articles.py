@@ -16,19 +16,21 @@ from utils.io_utils import async_json_read, atomic_json_write
 from utils.logger import LogConfig, destroy
 
 
-class ArticleResult(TypedDict):
+class PoliceArticleResult(TypedDict):
     source: str
     archive_category: str  # Can be either the year or district/city
     url: str
     title: str
     date: str | None
+    region: str
+    district: str
     municipality: str
     author: str | None
     description: str
     content: str
     has_pictures: bool
     has_documents: bool
-    keywords: list[str]
+    keywords: set[str]
     scraped_at: str
     html_base64: str
 
@@ -44,9 +46,9 @@ class ScrapingStats:
 
 type Domain = str
 type Year = str
-type ResBuffer = list[tuple[Domain, Year, ArticleResult]]
+type ResBuffer = list[tuple[Domain, Year, PoliceArticleResult]]
 
-# TODO domain/municipality/archive_category are VAGUE, make it make sense
+# TODO domain/region/archive_category are VAGUE, make it make sense
 class PoliceArticlesScraper(BaseScraper):
     MODULE_NAME = 'scrape_police_articles'
     BASE_URL = BASE_POLICE_URL
@@ -165,6 +167,11 @@ class PoliceArticlesScraper(BaseScraper):
         return year
 
 
+    # todo implement and return (region, district, municipality)
+    def get_location(self) -> tuple | None:
+        pass
+
+
     @staticmethod
     def get_content_text(content_ref, non_text_elements):
         content_text = ''
@@ -221,6 +228,7 @@ class PoliceArticlesScraper(BaseScraper):
         """
         async with self.lock:
             # Read what we already saved
+            # TODO store this in memory so we dont load it all the time
             current_results = await async_json_read(self.OUTPUT_FILE)
 
             # Append all the buffered results to the 'current_results'
@@ -255,6 +263,8 @@ class PoliceArticlesScraper(BaseScraper):
         soup, elements = await self.fetch_page(url, domain, year)
         p_tags, title_ref, description_ref, content_ref, pictures_ref, documents_ref = elements
 
+        title_text = title_ref[0].get_text()
+        description_text = description_ref[0].get_text().strip()
         has_pictures = bool(pictures_ref)
         has_documents = bool(documents_ref)
         date_text = self.get_date(content_ref, url, domain, year)
@@ -263,26 +273,34 @@ class PoliceArticlesScraper(BaseScraper):
         page_bytes = await self.fetch(url)  # For 'html_base64'
 
         # To get content_text, first define elements without the text
-        non_text_elements = self.get_non_text_elements(
-            title_ref, description_ref, pictures_ref, documents_ref
-        )
+        non_text_elements = self.get_non_text_elements(title_ref, description_ref, pictures_ref, documents_ref)
         # Then add the text from all the other elements
-        content_text = self.get_content_text(content_ref, non_text_elements, )
+        content_text = self.get_content_text(content_ref, non_text_elements)
 
         # Get keywords based on url AND the content
-        keywords = list(set(key for key in ALL_KEYWORDS
-                            if key in url or key in content_text)
-        )
+        keywords = {
+            key for key in ALL_KEYWORDS
+                if (key in url.lower()
+                    or key in content_text.lower()
+                    or key in description_text.lower())
+        }
 
-        article_result: ArticleResult = {
+        # todo use the content text (and possibly title/description) to find the municipality(city)
+        # todo then use that city to derive the district. If no city --> try looking for a district.
+        # todo If no district keep empty
+        region, district, municipality = self.get_location()
+
+        article_result: PoliceArticleResult = {
             'source': f'policie_{domain.replace(' ', '_').lower()}',
             'archive_category': arch_cat,
             'url': url,
-            'title': title_ref[0].get_text(),
+            'title': title_text,
             'date': date_text,
-            'municipality': domain,
+            'region': domain,
+            'district': district,
+            'municipality': municipality,
             'author': author_text,
-            'description': description_ref[0].get_text().strip(),
+            'description': description_text,
             'content': content_text,
             'has_pictures': has_pictures,
             'has_documents': has_documents,
@@ -290,7 +308,6 @@ class PoliceArticlesScraper(BaseScraper):
             'scraped_at': datetime.now(timezone.utc).isoformat(),
             "html_base64": base64.b64encode(page_bytes).decode("ascii"),
         }
-
         return article_result
 
 
