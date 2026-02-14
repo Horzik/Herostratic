@@ -54,11 +54,11 @@ class YearLinksScraper(BaseScraper):
 
 
     def process_archive_results(self, archive_jobs: list, archive_results: list) -> tuple:
-        """ Process all archive results from parsing the archive pages. \n
-            Return the target sites and number of failed tasks.
+        """Process all archive results from parsing the archive pages. \n
+           Return the target sites and number of failed tasks.
         """
         sites = {}
-        failed_arch_count = 0 # todo return the actual failed archives (or use the self.errors?)
+        failed_arch_count = 0 # todo return the actual failed archives
         # Get the municipalities from tasks, check and process each result
         for (municipality, coro), arch_result in zip(archive_jobs, archive_results):
             if isinstance(arch_result, Exception) or arch_result is None:
@@ -82,7 +82,7 @@ class YearLinksScraper(BaseScraper):
 
 
     async def has_pagination(self, listing_url: str) -> bool:
-        """ Checks if the url has the page pagination element.
+        """Checks if the url has the page pagination element.
         """
         try:
             content = await self.fetch(listing_url, gov_site=True)
@@ -100,9 +100,9 @@ class YearLinksScraper(BaseScraper):
 
 
     async def validate_links(self, all_years: dict, url: str) -> bool:
-        """ Gets the content of each link and verifies it contains the article listings.
-            Validation is 'all or nothing' => finding one failed link will return False.
-         """
+        """Gets the content of each link and verifies it contains the article listings.
+           Validation is 'all or nothing' => finding one failed link will return False.
+        """
         tasks = [
             self.has_pagination(listing_url)
             for _, urls in all_years.items()

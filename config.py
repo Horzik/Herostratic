@@ -6,12 +6,12 @@ DATA_DIR = ROOT / "data"
 OUTPUT_DIR = DATA_DIR / "output"
 INPUT_DIR = DATA_DIR / "input"
 LOG_DIR = DATA_DIR / "logs"
-IMG_DIT = DATA_DIR / "img"
+FILES_DIR = DATA_DIR / "files"
 
-# Create the "output" and "logs" dirs if they don't exist
+# Create these dirs if they don't exist
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-IMG_DIT.mkdir(parents=True, exist_ok=True)
+FILES_DIR.mkdir(parents=True, exist_ok=True)
 
 # Logs FPs
 ERRORS_LOG_FP = LOG_DIR / "errors.log"
@@ -28,20 +28,27 @@ ARTICLES_FP = OUTPUT_DIR / "articles3.json"
 HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
 DISTRICTS_FP = OUTPUT_DIR / "districts.txt"
+MUNICIPALITIES_FP = OUTPUT_DIR / "municipalities.txt"
+ALL_MUNIS_FP = OUTPUT_DIR / "all_munis.txt"
+ALL_DISTRICTS_FP = OUTPUT_DIR / "all_districts.txt"
 
 # Sites FPs
+# policie.cz
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
+POLICE_RESULTS_WITH_FILES = OUTPUT_DIR / "police_res_w_files.json"
 FAILED_POLICE_RESULTS_FP = OUTPUT_DIR / "failed_police_results.txt"
 YEAR_LINKS_FP = OUTPUT_DIR / "year_links1.json"
 JIHOMOR_LINKS_FP = OUTPUT_DIR / "jihomor_links.json"
 
+# aktualne.cz
 AKTUALNE_SITES_FP = INPUT_DIR / "aktualne_sites.txt"
 AKT_ART_FP = OUTPUT_DIR / "aktualne.txt"
 AKT_RESULTS_FP = OUTPUT_DIR / "aktualne_results.json"
 FAILED_AKT_RESULTS_FP = OUTPUT_DIR / "failed_aktualne_results.txt"
 
+# metro.cz
 METRO_SITE_FP = INPUT_DIR / "metro_site.txt"
 METRO_PATHS_FP = OUTPUT_DIR / "metro_paths.txt"
 METRO_ARTICLES_FP = OUTPUT_DIR / "metro_articles.json"
@@ -74,12 +81,14 @@ POPO_TIMEOUT = 40
 
 # Various
 PIG_RANKS = ['nprap.', 'plk.', 'por.', 'prap.', 'kpt.', 'mjr.', 'pprap.', 'npor.']
-CZECH_MONTHS = [
-        'ledna', 'února', 'března', 'dubna', 'května', 'června',
-        'července', 'srpna', 'září', 'října', 'listopadu', 'prosince',
-        'leden','únor','březen','duben','květen','červen',
-        'červenec', 'srpen', 'září',  'říjen', 'listopad', 'prosinec'
-]
+CZECH_MONTHS = {
+    'ledna': 1, 'února': 2, 'března': 3, 'dubna': 4,
+    'května': 5, 'června': 6, 'července': 7, 'srpna': 8,
+    'září': 9, 'října': 10, 'listopadu': 11, 'prosince': 12,
+    'leden': 1, 'únor': 2, 'březen': 3, 'duben': 4,
+    'květen': 5, 'červen': 6, 'červenec': 7, 'srpen': 8,
+    'říjen': 10, 'listopad': 11, 'prosinec': 12,
+}
 
 # Regex for getting the date from article content
 months_pattern = '|'.join(CZECH_MONTHS)

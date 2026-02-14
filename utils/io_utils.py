@@ -24,14 +24,13 @@ logger = get_logger('io_utils')
 
 
 class CriticalDataError(Exception):
-    """ Use if writing goes wrong.
-    """
+    """Use if writing goes wrong."""
     pass
 
 
 async def async_json_read(fp: str) -> dict:
-    """ Helper to read json asynchronously \n
-        Return the result OR return an empty dict.
+    """Helper to read json asynchronously.
+       Return the result OR return an empty dict.
     """
     try:
         async with aiofiles.open(fp, 'r', encoding='utf-8') as a:
@@ -48,11 +47,20 @@ async def async_json_read(fp: str) -> dict:
         return {}
 
 
+async def async_text_read(fp: str) -> str:
+    try:
+        async with aiofiles.open(fp, 'r', encoding='utf-8') as a:
+            content = await a.read()
+        return content
+    except FileNotFoundError:
+        logger.info(f"'{fp}' not found, returning empty string...")
+        return ""
 
-# todo add file creation if not existing?
+
+# todo this breaks if not json, fix it
 def atomic_json_write(data: dict | list, fp: str | Path):
-    """ Helper to write json 'atomically': first writes to a tmp file
-        and only then to the target file (cleans up the tmp file afterward).
+    """Helper to write json 'atomically': first writes to a tmp file
+       and only then to the target file (cleans up the tmp file afterward).
     """
     try:
         tmp_name = None

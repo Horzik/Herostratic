@@ -5,11 +5,12 @@ import asyncio
 from config import MAX_RETRIES, POPO_TIMEOUT, TIMEOUT
 from utils.logger import get_logger
 
-# connector = aiohttp.TCPConnector(
-#         limit=100,
-#         limit_per_host=30,
-#         ttl_dns_cache=500
-#     )
+
+class FetchError(Exception):
+    def __init__(self, url: str, status: int):
+        self.url = url
+        self.status = status
+        super().__init__(f"HTTP {status} for '{url}'")
 
 
 # Returns a new ClientSession with default config
@@ -44,18 +45,19 @@ async def get_bytes(
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:
         for attempt in range(MAX_RETRIES):
-            await asyncio.sleep(random.uniform(0.3, 0.5)) # Add small delay before each request
-            wait_time = 3 ** attempt # Incrementally increase the wait time
-            # time_start = time.perf_counter()
+            # Be little nice, sleep by default and wait on retries
+            await asyncio.sleep(random.uniform(0.3, 0.5))
+            wait_time = 3 ** attempt
+            # todo use the TTFB for congestion control (increase semaphore count OR outgoing requests)
             try:
                 async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout), verify_ssl=verify) as response:
-                    # todo read and use the TTFB for congestion control (increase semaphore count OR outgoing requests)
-                    # ttfb = time.perf_counter() - time_start
-                    # logger.debug(f"TTFB ==> {ttfb}")
-
-                    # todo make all the response handling a separate function?
+                    # todo abstract the response handling?
                     if response.status == 200:
-                        # Don't log anything, let the caller deal with it
+                        # Sometimes the status is 200 even though the page is 404...
+                        # todo this can get messy if the url includes a random '404' number by accident
+                        if "404" in str(response.url):
+                            raise FetchError(url, response.status)
+
                         content_bytes = await response.read()
                         return content_bytes
 
@@ -68,7 +70,7 @@ async def get_bytes(
                             continue
                         else:
                             logger.error(f"Failed fetching '{url}' with {response.status}, all tries exhausted")
-                            return None
+                            raise FetchError(url, response.status)
 
                     # Retry-able errors
                     elif response.status == 500:
@@ -84,11 +86,11 @@ async def get_bytes(
                             continue
                         else:
                             logger.error(f"Failed fetching '{url}' with {response.status}, all tries exhausted")
-                            return None
+                            raise FetchError(url, response.status)
 
                     else:  # 404, 403, 400, etc - don't retry
                         logger.error(f"HTTP {response.status} for '{url}', not retrying")
-                        return None
+                        raise FetchError(url, response.status)
 
             # Catch exceptions
             except aiohttp.ClientConnectionError as e:
@@ -99,7 +101,6 @@ async def get_bytes(
                 logger.warning(f"HTTPError for '{url}', (attempt {attempt + 1}/{MAX_RETRIES}):: {e}")
 
             # Retry after exception, add a jitter
-            # todo make this into a separate block?
             if attempt < MAX_RETRIES - 1:
                 jitter = random.uniform(0, wait_time)  # Add randomness
                 logger.warning(f"Retrying after {wait_time + jitter:.1f}s...")
@@ -107,6 +108,4 @@ async def get_bytes(
             else:
                 logger.error(f"Failed parsing '{url}', all tries exhausted")
                 return None
-
-        # Return so the linter stays happy :))
-        return
+        return None
