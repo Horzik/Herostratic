@@ -6,8 +6,8 @@ from config import DISTRICTS_FP
 from utils.network_utils import create_session, get_bytes
 
 
-""" This module parses the 'statnisprava' site (which btw, does not have a valid SSL :)), and returns
-    a list of all districts, which are then used to get all possible paths for the "metro.cz" scraper.
+"""
+    This module returns a list of all districts in czechia from the 'statnisprava' site (which btw does not have a valid SSL).
 """
 
 STATNI_SPRAVA_URL = 'https://www.statnisprava.cz/RSTSP/redakce.nsf/i/kraje_okresy_obce'
@@ -41,7 +41,7 @@ async def get_districts():
         page_bytes = await get_bytes(STATNI_SPRAVA_URL, session, semaphore, verify=False)
         soup = BeautifulSoup(page_bytes, 'lxml')
         if soup is None:
-            print(f"Failed getting soup...")
+            print(f"Failed getting soup, returning...")
             return None
 
         list_items = soup.select('div.clanek div.row div.col-sm-6:nth-of-type(2) ul li')
@@ -53,7 +53,7 @@ async def get_districts():
 
 
 async def main():
-    print(f"Starting the parser....")
+    print(f"Starting the scrape of czechia districts....")
     await get_districts()
     print(f"Finished, exiting....")
 
