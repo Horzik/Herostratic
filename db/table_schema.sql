@@ -11,9 +11,10 @@ CREATE TABLE IF NOT EXISTS articles (
     source VARCHAR(255) NOT NULL,
     url TEXT NOT NULL unique,
     location_id INTEGER REFERENCES locations(id),
+
+    year INTEGER,
     date DATE,
     author VARCHAR(100),
-
     title TEXT NOT NULL,
     description TEXT,
     content TEXT NOT NULL,
