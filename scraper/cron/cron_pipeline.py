@@ -3,8 +3,8 @@ from asyncio import gather, run
 
 from config import LOG_DIR, ERRORS_LOG_FP
 from scraper.args import ScraperArguments
-from scraper.police_tools.oop_get_police_articles import get_police_articles
-from scraper.police_tools.oop_scrape_police_articles import scrape_police_articles
+from scraper.police_tools.get_police_articles import get_police_articles
+from scraper.police_tools.scrape_police_articles import scrape_police_articles
 from utils.logger import LogConfig, init_logging, destroy
 
 log_config = LogConfig(
