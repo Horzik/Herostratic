@@ -36,7 +36,7 @@ class PoliceArticleResult(TypedDict):
     author: str | None
     description: str
     content: str
-    files: list[tuple[str, str]] | None # tuples of (file_path, file_type)
+    files: list[tuple[str, str]] | None # (file_path, file_type)
     keywords: list[str]
     scraped_at: str
     html_base64: str
@@ -76,185 +76,15 @@ class PoliceArticlesScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.stats = ScrapingStats()
-        self.all_results: dict = {}
+        self.cached_results: dict = {}
         self.results_buffer: ResBuffer = []
         self.results_buffer_threshold = 50
-        # todo understand well enough to either comment it or to redo it
+        self.queue_size = 0
+        # Cache for text search
         self.district_lookup = {}
         self.muni_lookup = {}
         self.muni_pattern: re.Pattern | None = None
         self.district_pattern: re.Pattern | None = None
-
-
-    @staticmethod
-    def write_failed_article(res_url):
-        # todo not the most optimal way of writing (writes one by one)
-        with open(FAILED_POLICE_RESULTS_FP, 'a') as f:
-            f.write(res_url + '\n')
-
-
-    def validate_result(self, result, region, arch_cat, url) -> bool:
-        if result is None:
-            self.logger.error(f"Error: result is None. Region '{region}'/'{arch_cat}', url: '{url}'...")
-            self.stats.failed_articles += 1
-            self.write_failed_article(url)
-            return False
-        if isinstance(result, Exception):
-            self.logger.error(
-                f"Error scraping police article: '{region}'/'{arch_cat}', url: '{url}' failed with exception: {result}")
-            self.stats.failed_articles += 1
-            self.write_failed_article(url)
-            return False
-        if not isinstance(result, dict):
-            self.logger.error(f"Error: result not a dict. Region '{region}'/'{arch_cat}', url: '{url}'...")
-            self.stats.failed_articles += 1
-            self.write_failed_article(url)
-            return False
-        return True
-
-
-    def process_results(self, article_jobs, article_results):
-        for job_data, result in zip([job[0] for job in article_jobs], article_results):
-            self.stats.articles_processed += 1
-            region, arch_cat, url = job_data
-
-            if not self.validate_result(result, region, arch_cat, url):
-                continue
-
-            if not result['date']:
-                self.stats.missing_date += 1
-            if not result['author']:
-                self.stats.missing_author += 1
-            if result['files']:
-                self.stats.with_files += 1
-            self.stats.saved_articles += 1
-        return
-
-
-    @staticmethod
-    def find_youtube_links(soup) -> list[str] | None:
-        """Goes through the whole soup and looks for youtube links, returns them in a list."""
-        text = str(soup)
-        # Any normal ytb links AND the iframe ('youtube-nocookie')
-        pattern = r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube-nocookie\.com/embed/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})'
-        matches = re.findall(pattern, text)
-        if matches:
-            return [f'https://www.youtube.com/watch?v={vid}' for vid in set(matches)]  # Deduplicate, return full URLs
-        else:
-            return None
-
-
-    async def download_ytb_video(self, ytb_url, url_path) -> tuple[str, str]:
-        """Use the 'yt_dlp' lib to download youtube links.
-           Returns a tuple of (file_path, file_type).
-        """
-        import yt_dlp
-
-        abs_dir = FILES_DIR / url_path
-        opts = {
-            'outtmpl': str(abs_dir / '%(title)s.%(ext)s'),
-            'format': 'best[height<=720]',
-            'quiet': True,
-        }
-        try:
-            # Wrap the download to be non-blocking
-            def _download():
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    dl_info = ydl.extract_info(ytb_url, download=True)
-                    return ydl.prepare_filename(dl_info)
-
-            file_name = await asyncio.to_thread(_download)
-            rel_path = url_path + '/' + Path(file_name).name
-            return str(rel_path), 'video'
-
-        except yt_dlp.utils.DownloadError as e:
-            self.logger.error(f"Error downloading a youtube video from: {url_path}...")
-            self.logger.error(e)
-            # todo remove the raise, just return None and log the error
-            raise
-
-
-    async def download_file(self, file_link, file_name, url_path) -> tuple[str, str | None]:
-        abs_file_path = FILES_DIR / url_path / file_name # Where to write the file
-        rel_file_path = url_path + '/' + file_name # Stored in PG
-
-        file_bytes = BytesIO(await self.fetch(file_link))
-        file_type = detect_file_category(bytes(file_bytes.getbuffer()[:32])) # Reads the magic bytes and determines the type
-        try:
-            with open(abs_file_path, 'wb') as f:
-                f.write(file_bytes.getbuffer())
-            return str(rel_file_path), file_type
-
-        except Exception as e:
-            self.logger.error(f"Error downloading file from {url_path}...")
-            self.logger.error(e)
-            # todo remove the raise, just return None and log the error
-            raise
-
-
-    def add_gallery_img(self, soup, links_set):
-        img_name = soup.select_one('div#image > img').get('alt')
-        img_href = soup.select_one('div#image > img').get('src')
-        self.logger.debug(f"add_gallery_link img href ::: {img_href}")
-        img_link = self.BASE_URL + "/" + img_href
-        links_set.add((img_link, img_name))
-
-
-    async def get_gallery_links(self, imgs_ref) -> set[FileMetadata]:
-        all_links: set[FileMetadata] = set()
-
-        # First get the gallery link (any image link goes to the gallery, select the first one)
-        gallery_link = imgs_ref.select_one('p.galThumb a').get('href')
-        if gallery_link and gallery_link.startswith('//'):
-            gallery_link = 'https:' + gallery_link
-
-        # Go to the gallery and add the image
-        gallery_soup = await self.get_soup(gallery_link)
-        self.add_gallery_img(gallery_soup, all_links)
-
-        # Then go over all other imgs and get their links
-        next_img_pager = gallery_soup.select_one('div#galerie > p.fotopager > a.nextfoto')
-        while next_img_pager:
-            next_gallery_link = self.BASE_URL + '/' + next_img_pager.get('href')
-            next_image_soup = await self.get_soup(next_gallery_link)
-            self.add_gallery_img(next_image_soup, all_links)
-            next_img_pager = next_image_soup.select_one('div#galerie > p.fotopager > a.nextfoto')
-
-        return all_links
-
-
-    def get_docs_links(self, docs_ref) -> set[FileMetadata]:
-        doc_files: set[FileMetadata] = set()
-
-        # Docs are in a list directly on the page
-        docs_list = docs_ref.select('ul > li')
-        for li in docs_list:
-            file_name = li.select_one('a').get_text(strip=True)
-            file_link = self.BASE_URL + li.select_one('a').get('href')
-            doc_files.add((file_link, file_name))
-
-        return doc_files
-
-
-    async def get_files(self, imgs_ref, docs_ref, url_path) -> list[tuple[str, str]]:
-        """Download the embedded files (pictures/videos).
-           Returns a list of tuple(file_path, file_type).
-        """
-        files_results: list[tuple[str, str]] = []
-
-        gallery_links = await self.get_gallery_links(imgs_ref[0]) if imgs_ref else set()
-        docs_links = self.get_docs_links(docs_ref[0]) if docs_ref else set()
-
-        # Make the dir if needed
-        file_dir_abs_path = FILES_DIR / url_path
-        if not file_dir_abs_path.is_dir():
-            file_dir_abs_path.mkdir(parents=True, exist_ok=True)
-
-        for file_link, file_name in gallery_links | docs_links:
-            file_path, file_type = await self.download_file(file_link, file_name, url_path)
-            files_results.append((file_path, file_type))
-
-        return files_results
 
 
     @staticmethod
@@ -274,6 +104,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def get_author(content_ref):
+        """Returns the police officers author by parsing for police ranks."""
         author_text = None
         for p in content_ref:
             text = p.get_text()
@@ -283,6 +114,19 @@ class PoliceArticlesScraper(BaseScraper):
                         author_text = (rank + line.split(rank, 1)[1]).strip()
 
         return author_text
+
+
+    @staticmethod
+    def get_year(arch_cat, date_text):
+        """Category might be a year, if not try parsing the date_text."""
+        try:
+            year = int(arch_cat.strip())
+        except ValueError:
+            year = None
+
+        if date_text and not year:
+            year = int(date_text[:4])
+        return year
 
 
     def get_archive_category(self, arch_cat, date_text, soup, url, region):
@@ -298,7 +142,6 @@ class PoliceArticlesScraper(BaseScraper):
             else:
                 self.logger.error(f"No drobek found for '{url}', '{region}'::'{arch_cat}....'")
 
-        self.logger.debug(f"Get archive category returns this as year:: {arch_cat}")
         return arch_cat
 
 
@@ -365,14 +208,204 @@ class PoliceArticlesScraper(BaseScraper):
         return p_tags, title_ref, description_ref, content_ref, imgs_ref, docs_ref
 
 
+
+    @staticmethod
+    def write_failed_article(res_url):
+        # todo not the most optimal way of writing (writes one by one)
+        with open(FAILED_POLICE_RESULTS_FP, 'a') as f:
+            f.write(res_url + '\n')
+
+
+    def validate_result(self, result, region, arch_cat, url) -> bool:
+        if isinstance(result, Exception):
+            self.logger.error(
+                f"Error scraping police article: '{region}'/'{arch_cat}', url: '{url}' failed with exception: {result}")
+            self.stats.failed_articles += 1
+            self.write_failed_article(url)
+            return False
+        if not isinstance(result, dict):
+            self.logger.error(f"Error: result not a dict. Region '{region}'/'{arch_cat}', url: '{url}'...")
+            self.stats.failed_articles += 1
+            self.write_failed_article(url)
+            return False
+        return True
+
+
+    def process_single_result(self, job_data, result):
+        self.stats.articles_processed += 1
+        region, arch_cat, url = job_data
+
+        if not self.validate_result(result, region, arch_cat, url):
+            return
+
+        if not result['date']:
+            self.stats.missing_date += 1
+        if not result['author']:
+            self.stats.missing_author += 1
+        if result['files']:
+            self.stats.with_files += 1
+        self.stats.saved_articles += 1
+
+
+    @staticmethod
+    def find_youtube_links(soup) -> list[str] | None:
+        """Goes through the whole soup and looks for youtube links, returns them in a list."""
+        text = str(soup)
+        # Any normal ytb links AND the iframe ('youtube-nocookie')
+        pattern = r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube-nocookie\.com/embed/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})'
+        matches = re.findall(pattern, text)
+        if matches:
+            return [f'https://www.youtube.com/watch?v={vid}' for vid in set(matches)]  # Deduplicate, return full URLs
+        else:
+            return None
+
+
+    async def download_ytb_video(self, ytb_url, url_path) -> tuple[str, str] | None:
+        """Use the 'yt_dlp' lib to download youtube links.
+           Returns a tuple of (file_path, file_type).
+        """
+        import yt_dlp
+
+        abs_dir = FILES_DIR / url_path
+        opts = {
+            'outtmpl': str(abs_dir / '%(title)s.%(ext)s'),
+            'format': 'best[height<=720]',
+            'quiet': True,
+        }
+        try:
+            # Wrap the download to be non-blocking
+            def _download():
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    dl_info = ydl.extract_info(ytb_url, download=True)
+                    return ydl.prepare_filename(dl_info)
+
+            file_name = await asyncio.to_thread(_download)
+            rel_path = url_path + '/' + Path(file_name).name
+            return str(rel_path), 'video'
+
+        except yt_dlp.utils.DownloadError as e:
+            self.logger.error(f"Error downloading a youtube video from: {url_path}...")
+            self.logger.error(e)
+            return None
+
+
+    async def download_file(self, file_link, file_name, dir_name) -> tuple[str, str] | None:
+        """Saves target :param{url_path} bytes as :param{file_name} at :param{url_path}."""
+        abs_file_path = FILES_DIR / dir_name / file_name # Where to write the file
+        rel_file_path = dir_name + '/' + file_name # Stored in PG
+
+        file_bytes = BytesIO(await self.fetch(file_link))
+        file_type = detect_file_category(bytes(file_bytes.getbuffer()[:32])) # Reads the magic bytes and determines the type
+        try:
+            with open(abs_file_path, 'wb') as f:
+                f.write(file_bytes.getbuffer())
+            return str(rel_file_path), file_type
+
+        except Exception as e:
+            self.logger.error(f"Error downloading file from {dir_name}...")
+            self.logger.error(e)
+            return None
+
+
+    async def get_gallery_links(self, imgs_ref) -> set[FileMetadata]:
+        """Police gallery parser which returns links to the images inside."""
+        links_set: set[FileMetadata] = set()
+
+        def _add_gallery_img(soup, _links_set, count):
+            img_name = soup.select_one('div#image > img').get('alt')
+            img_href = soup.select_one('div#image > img').get('src')
+            img_link = self.BASE_URL + "/" + img_href
+            _links_set.add((img_link, img_name + f"_{count}"))
+
+        # First get the gallery link (any image link goes to the gallery, select the first one)
+        gallery_link_el = imgs_ref.select_one('p.galThumb a')
+        if not  gallery_link_el:
+            return links_set
+
+        gallery_link = gallery_link_el.get('href')
+        if gallery_link and gallery_link.startswith('//'):
+            gallery_link = 'https:' + gallery_link
+
+        # Go to the gallery and add the first image
+        gallery_soup = await self.get_soup(gallery_link)
+        img_count = 1
+        _add_gallery_img(gallery_soup, links_set, img_count)
+
+        # Then go over all other imgs and get their links
+        next_img_pager = gallery_soup.select_one('div#galerie > p.fotopager > a.nextfoto')
+        while next_img_pager:
+            img_count += 1
+            next_gallery_link = self.BASE_URL + '/' + next_img_pager.get('href')
+            next_image_soup = await self.get_soup(next_gallery_link)
+            _add_gallery_img(next_image_soup, links_set, img_count)
+            next_img_pager = next_image_soup.select_one('div#galerie > p.fotopager > a.nextfoto')
+
+        return links_set
+
+
+    def get_docs_links(self, docs_ref) -> set[FileMetadata]:
+        doc_files: set[FileMetadata] = set()
+
+        # Docs are in a list directly on the page
+        docs_list = docs_ref.select('ul > li')
+        for li in docs_list:
+            file_name = li.select_one('a').get_text(strip=True)
+            file_link = self.BASE_URL + li.select_one('a').get('href')
+            doc_files.add((file_link, file_name))
+
+        return doc_files
+
+
+    async def get_files(self, imgs_ref, docs_ref, soup, url) -> list[tuple[str, str]] | list:
+        """Download the embedded files (pictures/videos).
+           Returns a list of tuple(file_path, file_type) on success and empty list on fail.
+        """
+
+        files_results: list[tuple[str, str]] = []
+        dir_name = re.search(r'/([^/]+)\.[^.]+$', url).group(1).strip()
+
+        ytb_urls = self.find_youtube_links(soup)
+        if ytb_urls:
+            files = files_results or []
+            for ytb_url in ytb_urls:
+                files.append(await self.download_ytb_video(ytb_url, dir_name))
+
+        gallery_links = None
+        docs_links = None
+        try:
+            if imgs_ref is not None:
+                # self.logger.debug(f"Imgs_ref:: {imgs_ref}")
+                gallery_links = await self.get_gallery_links(imgs_ref[0]) if imgs_ref else set()
+            if docs_ref is not None:
+                docs_links = self.get_docs_links(docs_ref[0]) if docs_ref else set()
+
+            if gallery_links | docs_links:
+                # Make the target dir if needed
+                file_dir_abs_path = FILES_DIR / dir_name
+                if not file_dir_abs_path.is_dir():
+                    file_dir_abs_path.mkdir(parents=True, exist_ok=True)
+
+                for file_link, file_name in gallery_links | docs_links:
+                    file_name = file_name.replace('/', '_').replace('\\', '_')
+                    file_path, file_type = await self.download_file(file_link, file_name, dir_name)
+                    files_results.append((file_path, file_type))
+
+        except Exception as e:
+            self.logger.error(f"Error while getting files from {url}...", exc_info=True)
+            self.logger.error(e)
+            return list()
+
+        return files_results
+
+
     async def flush_buffer(self):
         """Writes to the in-memory "all_results" first. Then it saves the batched articles."""
         async with self.lock:
             for region, arch_cat, content in self.results_buffer:
-                self.all_results.setdefault(region, {}).setdefault(arch_cat, []).append(content)
+                self.cached_results.setdefault(region, {}).setdefault(arch_cat, []).append(content)
 
             # Write results back and clean the buffer
-            atomic_json_write(self.all_results, self.OUTPUT_FILE)
+            atomic_json_write(self.cached_results, self.OUTPUT_FILE)
             self.results_buffer = []
         return
 
@@ -381,35 +414,17 @@ class PoliceArticlesScraper(BaseScraper):
         """Helper to get both the soup and elements. Checks if the soup isn't actually just 404."""
         soup = await self.get_soup(url)
         if soup is None:
-            return None
+            raise ValueError(f"Failed getting soup for '{url}' from '{region}'::'{arch_cat}")
 
         elements = self.get_elements(soup, url, region, arch_cat)
         if elements is None:
-            self.logger.error(f"Failed parsing elements for '{url}' from '{region}'::'{arch_cat}")
-            return None
+            raise ValueError(f"Failed parsing elements for '{url}' from '{region}'::'{arch_cat}")
 
         return soup, elements
 
 
-    @staticmethod
-    def get_year(arch_cat, date_text):
-        try:
-            year = int(arch_cat.strip())
-        except ValueError:
-            year = None
-
-        if date_text and not year:
-            year = int(date_text[:4])
-
-        return year
-
-
     async def parse_html(self, url: str, region: str, arch_cat: str) -> PoliceArticleResult | None:
-        fetch_res = await self.fetch_page(url, region, arch_cat)
-        if fetch_res is None:
-            return None
-
-        soup, elements = fetch_res
+        soup, elements = await self.fetch_page(url, region, arch_cat)
         p_tags, title_ref, description_ref, content_ref, imgs_ref, docs_ref = elements
 
         title_text = title_ref[0].get_text()
@@ -437,16 +452,7 @@ class PoliceArticlesScraper(BaseScraper):
                     or key in description_text.lower())
         }
 
-        files = None
-        url_path = re.search(r'/([^/]+)\.[^.]+$', url).group(1)
-        if imgs_ref or docs_ref:
-            files = await self.get_files(imgs_ref, docs_ref, url_path)
-
-        ytb_urls = self.find_youtube_links(soup)
-        if ytb_urls:
-            files = files or []
-            for ytb_url in ytb_urls:
-                files.append(await self.download_ytb_video(ytb_url, url_path))
+        files = await self.get_files(imgs_ref, docs_ref, soup, url)
 
         article_result: PoliceArticleResult = {
             'source': f'policie_{region.replace(' ', '_').lower()}',
@@ -471,26 +477,12 @@ class PoliceArticlesScraper(BaseScraper):
 
     async def scrape_article(self, url: str, region: str, arch_cat: str):
         """The main scraping method."""
-        try:
-            article_result = await self.parse_html(url, region, arch_cat)
-            if not article_result:
-                self.logger.error(f"Exiting scrape coro of article url '{url}'...")
-                return None
-
-            # Append the result to the buffer
-            self.logger.info(f"Got an article from '{url}', '{region}'/'{arch_cat}'")
-            self.results_buffer.append((region, arch_cat, article_result))
-
-            # If the buffer is large enough ==> write it
-            if len(self.results_buffer) > self.results_buffer_threshold:
-                self.logger.info(f"Writing from a buffer...")
-                await self.flush_buffer()
-
-            return article_result
-
-        except Exception:
-            self.logger.error(f"Error: failed with exception while scraping '{url}' from '{region}'::'{arch_cat}...", exc_info=True)
+        article_result = await self.parse_html(url, region, arch_cat)
+        if not article_result:
+            self.logger.error(f"Exiting scrape coro of article url '{url}'...")
             return None
+
+        return article_result
 
 
     async def get_scraped_urls(self) -> set[str]:
@@ -498,32 +490,15 @@ class PoliceArticlesScraper(BaseScraper):
            Used for deduping results, ie to not re-add a result which we already have.
         """
         initial_results_urls = set()
-
         results_dict = await async_json_read(self.OUTPUT_FILE)
-        self.all_results = results_dict # Assign the class attribute with all the existing results
         for region, arch_categories in results_dict.items():
             for category, articles in arch_categories.items():
                 for article in articles:
                     initial_results_urls.add(article['url'])
 
+        self.cached_results = results_dict # Assign the class attribute with all existing results
         self.logger.info(f"Initial results urls: {len(initial_results_urls)}")
         return initial_results_urls
-
-
-    async def mk_tasks(self):
-        """Return a list tasks in the form of:
-           ((region, archive_category, url), scrape_task)
-        """
-        scraped_urls = await self.get_scraped_urls()
-
-        articles_links = await async_json_read(self.INPUT_FILE)
-        article_jobs = [
-            ((region, archive_category, url), self.scrape_article(url, region, archive_category))  # ((metadata), coroutine)
-            for region, arch_categories in articles_links.items()
-            for archive_category, urls_list in arch_categories.items()
-            for url in urls_list if url not in scraped_urls
-        ]
-        return article_jobs
 
 
     async def load_czech_locations(self):
@@ -545,25 +520,69 @@ class PoliceArticlesScraper(BaseScraper):
         )
 
 
+    async def mk_work_items(self):
+        """Loop that pushes items (tuples of input from file) into a queue."""
+        articles_links = await async_json_read(self.INPUT_FILE)
+        scraped_articles = await self.get_scraped_urls()
+
+        seen = set() # Safety dedupe
+        work_items = []
+        for region, arch_categories in articles_links.items():
+            for arch_cat, urls_list in arch_categories.items():
+                for url in urls_list:
+                    if url not in scraped_articles and url not in seen:
+                        seen.add(url)
+                        work_items.append((region, arch_cat, url))
+        return work_items
+
+
     async def scraper(self):
             timer_start = time.time()
             await self.load_czech_locations()
 
-            article_jobs = await self.mk_tasks()
-            # todo use "as_completed" and process each result directly instead of all at once
-            article_results = await asyncio.gather(*[coro for _, coro in article_jobs], return_exceptions=True)
-            self.process_results(article_jobs, article_results)
+            async def worker(scrape_queue: asyncio.Queue):
+                """Listens for input from queue. Manages the buffer writes. """
+                while True:
+                    region, archive_category, url = await scrape_queue.get()
+                    try:
+                        result = await self.scrape_article(url, region, archive_category)
+                        self.process_single_result((region, archive_category, url), result)
 
-            if len(self.results_buffer) > 0: # Write any remaining results
+                        # Append the result to the buffer
+                        self.results_buffer.append((region, archive_category, result))
+
+                        # If the buffer is large enough ==> write it
+                        if len(self.results_buffer) > self.results_buffer_threshold:
+                            self.logger.info(f"Writing from a buffer...")
+                            await self.flush_buffer()
+
+                    except Exception:
+                        self.logger.error(f"Error while scraping '{url}' from '{region}':", exc_info=True)
+                    finally:
+                        self.logger.info(f"Finished scraping task {self.stats.articles_processed} / {self.queue_size} :: '{url}' from '{region}':")
+                        scrape_queue.task_done()
+
+            queue = asyncio.Queue()
+            workers = [asyncio.create_task(worker(queue)) for _ in range(20)]
+            work_items = await self.mk_work_items()
+            self.queue_size = len(work_items)
+
+            for item in work_items:
+                await queue.put(item)
+            await queue.join()
+
+            # Quit the workers and write any remaining results
+            for w in workers:
+                w.cancel()
+            if len(self.results_buffer) > 0:
                 await self.flush_buffer()
 
             timer_end = time.time()
             formatted_time = str(timedelta(seconds=timer_end - timer_start))
-
             self.logger.info(f"Finished scraping in {formatted_time}")
             self.logger.info(f"Processed {self.stats.articles_processed} articles, saved {self.stats.saved_articles}.")
             self.logger.info(f"{self.stats.failed_articles} articles failed.")
-            self.logger.info(f"{self.stats.missing_date} articles are missing date, {self.stats.missing_author} are missing author.")
+            self.logger.info(f"{self.stats.missing_date} articles missing date, {self.stats.missing_author} missing author.")
             self.logger.info(f"{self.stats.with_files} articles have documents.")
             self.logger.info(f"Exiting...")
 
