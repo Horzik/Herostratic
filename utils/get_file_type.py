@@ -6,4 +6,6 @@ def detect_file_category(data: bytes) -> str:
         return 'video'
     if data[:4] == b'%PDF' or data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':  # PDF + OLE (doc/xls)
         return 'document'
+    if data[:3] == b'ID3' or data[:2] in (b'\xff\xfb', b'\xff\xf3', b'\xff\xf2'):
+        return 'audio'
     return 'unknown'

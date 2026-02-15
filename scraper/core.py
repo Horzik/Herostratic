@@ -47,9 +47,8 @@ class BaseScraper(ABC):
         """Wrapper for fetching to hide the session and semaphore."""
         try:
             return await get_bytes(url, self._session, self._semaphore, gov_site)
-        except FetchError as e:
-            self.logger.error(f"Fetch failed {e}")
-            return None
+        except FetchError:
+            raise
 
 
     async def get_soup(self, url: str) -> BeautifulSoup | None:

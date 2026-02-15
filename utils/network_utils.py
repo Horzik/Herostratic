@@ -53,11 +53,6 @@ async def get_bytes(
                 async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout), verify_ssl=verify) as response:
                     # todo abstract the response handling?
                     if response.status == 200:
-                        # Sometimes the status is 200 even though the page is 404...
-                        # todo this can get messy if the url includes a random '404' number by accident
-                        if "404" in str(response.url):
-                            raise FetchError(url, response.status)
-
                         content_bytes = await response.read()
                         return content_bytes
 
