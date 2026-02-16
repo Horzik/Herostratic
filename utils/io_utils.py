@@ -57,6 +57,15 @@ async def async_text_read(fp: str) -> str:
         return ""
 
 
+def read_json(fp: str) -> dict:
+    try:
+        with open(fp, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.info(f"'{fp}' not found, returning empty dict...")
+        return {}
+
+
 # todo this breaks if not json, fix it
 def atomic_json_write(data: dict | list, fp: str | Path):
     """Helper to write json 'atomically': first writes to a tmp file
