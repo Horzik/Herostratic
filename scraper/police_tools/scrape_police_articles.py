@@ -18,7 +18,7 @@ from config import (POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_F
 from scraper.core import BaseScraper
 from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
 from utils.get_file_type import detect_file_category
-from utils.io_utils import async_json_read, atomic_json_write, async_text_read
+from utils.io_utils import async_json_read, atomic_json_write, async_text_read, read_json
 from utils.logger import LogConfig, destroy
 from utils.network_utils import FetchError
 from utils.parsing_utils import parse_czech_date
@@ -145,12 +145,13 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     def resolve_archive_category(self, arch_cat, date_text, soup, url, region):
-        """Fed 'arch_cat' can be many things. Get a clear archive category.
+        """Fed 'arch_cat' be either a year or string 'non_years'. Try resolving to a year.
         """
         if arch_cat == "non_years" and date_text is not None:
             arch_cat = str(date_text[:4])
         elif arch_cat == "non_years" and date_text is None:
-            drobek_el = soup.select_one(POLICE_SELECTOR['article_selectors']['drobek'])
+            # Look for the category in the site navigation.
+            drobek_el = soup.select_one('div#siteNavigation')
             if drobek_el:
                 drobek_text = drobek_el.get_text()
                 arch_cat = drobek_text[-4:]
@@ -359,7 +360,7 @@ class PoliceArticlesScraper(BaseScraper):
         if sound_el is not None:
             sound_file_path = sound_el.get('data-file')
             if sound_file_path:
-                sound_file_url = self.BASE_URL + "/" + sound_file_path
+                sound_file_url = self.BASE_URL + sound_file_path
                 self.logger.debug(f"Sound file url:: {sound_file_url}")
                 sound_file_name = sound_file_path.rsplit('.')[0].rsplit('/')[1]  # The path we get looks like "soubor/vandal-2109-mp3.aspx" ==> get just the unique string in the middle
                 self.logger.debug(f"Sound file name:: {sound_file_name}")
@@ -424,7 +425,11 @@ class PoliceArticlesScraper(BaseScraper):
         """Helper to get both the soup and elements.
            Checks if the soup isn't actually just 404 (that is valid status but invalid article listing).
         """
-        soup = await self.get_soup(url)
+        page_bytes = await self.fetch(url, gov_site=self.GOV_SITE)
+        if page_bytes is None:
+            raise
+
+        soup = BeautifulSoup(page_bytes, 'lxml')
         if soup is None:
             self.logger.debug(f"Failed getting soup for '{url}' from '{region}'::'{arch_cat}")
             raise ValueError("'Soup' is None")
@@ -440,12 +445,12 @@ class PoliceArticlesScraper(BaseScraper):
             self.logger.debug(f"Failed parsing elements for '{url}' from '{region}'::'{arch_cat}")
             raise ValueError("'Elements' is None")
 
-        return soup, el_lists
+        return soup, el_lists, page_bytes
 
 
     async def scrape_article(self, url: str, region: str, arch_cat: str) -> PoliceArticleResult | None:
         """The main scraping method."""
-        soup, el_lists = await self.fetch_page(url, region, arch_cat)
+        soup, el_lists, page_bytes = await self.fetch_page(url, region, arch_cat)
         title_el, description_el, content_el, imgs_el, docs_el, sound_el = el_lists
 
         title_text = title_el[0].get_text()
@@ -454,7 +459,6 @@ class PoliceArticlesScraper(BaseScraper):
         author_text = self.parse_author(content_el)
         arch_cat = self.resolve_archive_category(arch_cat, date_text, soup, url, region)
         year = self.resolve_year(arch_cat, date_text)
-        page_bytes = await self.fetch(url)  # For 'html_base64'
         files = await self.download_files(imgs_el, docs_el, sound_el, soup, url)
 
         # For 'content_text' we first define unwanted elements, then exclude them from the content_text parse
@@ -492,13 +496,13 @@ class PoliceArticlesScraper(BaseScraper):
         })
 
 
-    # todo async is pointless here
-    async def get_scraped_urls(self) -> set[str]:
+    def get_scraped_urls(self) -> set[str]:
         """Reads the "police_results" and returns a set of only the URLs.
            Used for deduping results, ie to not re-add a result which we already have.
         """
         initial_results_urls = set()
-        results_dict = await async_json_read(self.OUTPUT_FILE)
+
+        results_dict = read_json(self.OUTPUT_FILE)
         for region, arch_categories in results_dict.items():
             for category, articles in arch_categories.items():
                 for article in articles:
@@ -509,12 +513,12 @@ class PoliceArticlesScraper(BaseScraper):
         return initial_results_urls
 
 
-    async def load_czech_locations(self):
+    def load_czech_locations(self):
         """Store dicts of all word-cases and their nominative as 'lookup's.
            Store sorted regex patterns of the all word-cases as 'pattern's.
         """
-        muni_map = json.loads(await async_text_read(ALL_MUNIS_FP))
-        district_map = json.loads(await async_text_read(ALL_DISTRICTS_FP))
+        muni_map = read_json(ALL_MUNIS_FP)
+        district_map = read_json(ALL_DISTRICTS_FP)
 
         self.muni_lookup = {form.lower(): nominative for form, nominative in muni_map.items()}
         self.district_lookup = {form.lower(): nominative for form, nominative in district_map.items()}
@@ -531,10 +535,10 @@ class PoliceArticlesScraper(BaseScraper):
         )
 
 
-    async def mk_work_items(self):
+    def mk_work_items(self):
         """Loop that pushes items (tuples of input from file) into a queue."""
-        articles_links = await async_json_read(self.INPUT_FILE)
-        scraped_articles = await self.get_scraped_urls()
+        articles_links = read_json(self.INPUT_FILE)
+        scraped_articles = self.get_scraped_urls()
 
         seen = set() # Safety dedupe
         work_items = []
@@ -556,12 +560,13 @@ class PoliceArticlesScraper(BaseScraper):
         for w in workers:
             w.cancel()
 
-        if len(self.results_buffer) > 0:
+        if self.results_buffer:
             await self.flush_buffer()
 
 
     async def setup_scrape(self):
         queue = asyncio.Queue()
+
         async def _worker(scrape_queue: asyncio.Queue):
             """Listens for input from queue. Manages the buffer writes. """
             while True:
@@ -575,7 +580,6 @@ class PoliceArticlesScraper(BaseScraper):
                     if len(self.results_buffer) > self.results_buffer_threshold:
                         self.logger.info(f"Writing from a buffer...")
                         await self.flush_buffer()
-
                 except FetchError:
                     self.stats.failed_articles += 1
                     self.write_failed_article(url)
@@ -589,14 +593,14 @@ class PoliceArticlesScraper(BaseScraper):
                     scrape_queue.task_done()
 
         workers = [asyncio.create_task(_worker(queue)) for _ in range(20)]
-        work_items = await self.mk_work_items()
+        work_items = self.mk_work_items()
         self.queue_size = len(work_items)
         return queue, workers, work_items
 
 
     async def run(self):
         timer_start = time.time()
-        await self.load_czech_locations()
+        self.load_czech_locations()
         queue, workers, work_items = await self.setup_scrape()
 
         await self.scrape_site(queue, workers, work_items)

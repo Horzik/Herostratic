@@ -111,20 +111,20 @@ class MunicipalityParser(ABC):
             if muni_key in municipality:
                 years_table = soup.select(selector)
                 if years_table:
-                    self.logger.debug(f'Using the special years table')
+                    self.logger.debug(f'Using the special years table for {municipality}')
                     return years_table
 
         # Then try the default one
         years_table = soup.select(POLICE_SELECTOR['archive_selectors']['year_links'])
         if years_table:
-            self.logger.debug(f'Using the default years table')
+            self.logger.debug(f'Using the default years table for {municipality}')
             return years_table
 
         # Finally try TABLE_SELECTORS
         for i, og_selector in enumerate(TABLE_SELECTORS):
             years_table = soup.select(og_selector)
             if years_table:
-                self.logger.debug(f'Using the table_selectors years table')
+                self.logger.debug(f'Using the table_selectors years table for {municipality}')
                 return years_table
 
         self.logger.error(f"Could not find year table for municipality '{municipality}'")

@@ -33,7 +33,7 @@ type NextUrl = str
 class ListingsParser(BaseScraper):
     MODULE_NAME = "get_police_articles"
     BASE_URL = BASE_POLICE_URL
-    INPUT_FILE = YEAR_LINKS_FP # We get this from the "oop_year_links" module
+    INPUT_FILE = YEAR_LINKS_FP # Scraped from "oop_year_links" module
     OUTPUT_FILE = POLICE_ARTICLES_FP
     GOV_SITE = True
     SEMAPHORE_COUNT = 10
@@ -43,6 +43,13 @@ class ListingsParser(BaseScraper):
         log_file_path=LOG_DIR / 'get_police_articles.log',
         log_errors_file_path=ERRORS_LOG_FP
     )
+
+
+    def __init__(self):
+        super().__init__()
+        self.existing_urls: set = set()
+        self.results_buffer = []
+        self.cached_results = []
 
 
     async def _read_and_write(
@@ -151,10 +158,12 @@ class ListingsParser(BaseScraper):
         for article in article_list:
             # If this fail, just let it crash
             link_el = article.select_one(POLICE_SELECTOR['listing_selectors']['article_link'])
-            article_link = link_el['href']
+            article_href = link_el['href']
+            article_link = BASE_POLICE_URL + article_href
             metadata.all_articles_count += 1
-            if any(keyword in article_link for keyword in URL_KEYWORDS):
-                metadata.articles.append(BASE_POLICE_URL + article_link)
+            if any(keyword in article_link for keyword in URL_KEYWORDS) and article_link not in self.existing_urls:
+                # todo add to a buffer instead
+                metadata.articles.append(article_link)
                 self.logger.info(f"Found an article...:'{article_link}'")
 
         # Return the next page link, which will change the 'new_url' in 'scrape_municipality' to continue the loop
@@ -222,7 +231,7 @@ class ListingsParser(BaseScraper):
         return article_scrape_coros
 
 
-    async def get_existing_urls(self) -> set[str]:
+    async def set_existing_urls(self):
         """ Used for deduping results, ie to not re-add a result which we already have.
         """
         initial_results_urls = set()
@@ -233,13 +242,14 @@ class ListingsParser(BaseScraper):
                     initial_results_urls.add(article)
 
         # self.logger.info(f"Initial results urls: {len(initial_results_urls)}")
+        self.existing_urls = initial_results_urls
         return initial_results_urls
 
 
     async def scrape(self, cron_max_pages: int | None) -> bool:
         """Main orchestrator, runs archive jobs (to get year links of archives), then the article jobs (to get article urls).
         """
-        existing_urls = await self.get_existing_urls()
+        pre_scrape_existing_urls = await self.set_existing_urls()
         if cron_max_pages:
             self.logger.info(f"Running '{self.MODULE_NAME}' in CRON mode, pages to check: {cron_max_pages}.")
 
@@ -251,8 +261,8 @@ class ListingsParser(BaseScraper):
         logs: ScrapeLogData = self.process_article_results(results)
         (saved_articles, failed_articles, articles_processed, total_pages) = logs
         self.logger.info(f"Processed {articles_processed} articles from {total_pages} pages, saved {saved_articles}, failed {failed_articles}")
-        urls_after_scrape = await self.get_existing_urls()
-        found_new_articles = len(existing_urls) != len(urls_after_scrape)
+        post_scrape_existing_urls = await self.set_existing_urls()
+        found_new_articles = len(pre_scrape_existing_urls) != len(post_scrape_existing_urls)
         return found_new_articles
 
 

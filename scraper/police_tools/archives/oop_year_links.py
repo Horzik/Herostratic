@@ -20,7 +20,7 @@ class YearLinksScraper(BaseScraper):
     INPUT_FILE = POLICE_ARCHIVES_FP
     OUTPUT_FILE = YEAR_LINKS_FP
     GOV_SITE = True
-    SEMAPHORE_COUNT = 30
+    SEMAPHORE_COUNT = 10
     LOG_CONFIG = LogConfig(
         log_level=logging.DEBUG,
         log_std_level=logging.DEBUG,
@@ -37,8 +37,7 @@ class YearLinksScraper(BaseScraper):
         """ Wraps the 'atomic_write' func in the class lock.
         """
         try:
-            with self.lock:
-                atomic_json_write(data, self.OUTPUT_FILE)
+            atomic_json_write(data, self.OUTPUT_FILE)
         except CriticalDataError:
             raise
 
@@ -53,31 +52,31 @@ class YearLinksScraper(BaseScraper):
         raise ValueError(f"No parser found for municipality: {municipality}")
 
 
-    def process_archive_results(self, archive_jobs: list, archive_results: list) -> tuple:
+    def process_archive_results(self, archive_results: list) -> tuple:
         """Process all archive results from parsing the archive pages. \n
            Return the target sites and number of failed tasks.
         """
         sites = {}
+        urls_count = 0
         failed_arch_count = 0 # todo return the actual failed archives
         # Get the municipalities from tasks, check and process each result
-        for (municipality, coro), arch_result in zip(archive_jobs, archive_results):
-            if isinstance(arch_result, Exception) or arch_result is None:
-                self.logger.error(f"Error getting archive task for municipality: '{municipality}'...")
-                self.logger.error(f"Task '{type(arch_result).__name__}', result:: {arch_result}")
-                self.errors.append(f"municipality '{municipality}' failed. Task::'{coro}'. Result:: '{arch_result}'")
-                self.pages_scraped += 1
+        for result in archive_results:
+            self.pages_scraped += 1
+            if isinstance(result, Exception) or result is None:
+                self.errors.append(f"Archive task failed: {result}")
                 failed_arch_count += 1
                 continue
 
-            municipality, year_links = arch_result
+            # Append to and return the 'sites'
+            municipality, year_links = result
             if municipality not in sites:
                 sites[municipality] = year_links
-            else: # Extend the municipality
+            else:
                 for year, urls in year_links.items():
+                    urls_count += len(urls)
                     sites[municipality].setdefault(year, []).extend(urls)
-            self.pages_scraped += 1
 
-        self.logger.debug(f"Results:: Found {len(sites)} sites:: {sites}")
+        self.logger.debug(f"Results:: Found {urls_count} urls across {len(sites)} sites.")
         return sites, failed_arch_count
 
 
@@ -148,12 +147,11 @@ class YearLinksScraper(BaseScraper):
 
         validated = await self.validate_links(all_links, arch_url)
         if validated:
-            self.logger.debug(f"Success validating year links for url '{arch_url}'...")
+            return all_links
         else:
             self.logger.error(f"Failed to validate year links for url '{arch_url}', returning None...")
             return None
 
-        return all_links
 
 
     async def get_all_links(self, arch_url: str, municipality: str) -> tuple[str, dict] | None:
@@ -176,7 +174,7 @@ class YearLinksScraper(BaseScraper):
             archives: dict = json.load(a)
 
         return [
-            (municipality, self.get_all_links(arch_url, municipality))
+            self.get_all_links(arch_url, municipality)
             for municipality, urls in archives.items()
             for arch_url in urls
         ]
@@ -190,7 +188,7 @@ class YearLinksScraper(BaseScraper):
 
         results = await gather(*tasks, return_exceptions=True)
 
-        sites, failed_arch_count = self.process_archive_results(tasks, results)
+        sites, failed_arch_count = self.process_archive_results(results)
         if sites:
             self.write_results(sites)
 
@@ -199,6 +197,7 @@ class YearLinksScraper(BaseScraper):
             f"Finished in {duration}, "
             f"success for {self.pages_scraped - failed_arch_count}/{self.pages_scraped} targets, "
             f"validated {self.validated_links} links, exiting...")
+
 
 async def main() -> None:
     async with YearLinksScraper() as scr:

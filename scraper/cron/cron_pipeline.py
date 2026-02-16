@@ -5,7 +5,7 @@ from config import LOG_DIR, ERRORS_LOG_FP
 from scraper.args import ScraperArguments
 from scraper.police_tools.get_police_articles import get_police_articles
 from scraper.police_tools.scrape_police_articles import scrape_police_articles
-from utils.logger import LogConfig, init_logging, destroy
+from utils.logger import LogConfig, init_logging, destroy, get_logger
 
 log_config = LogConfig(
     log_level=logging.DEBUG,
@@ -30,7 +30,8 @@ async def run_orchestrator(cron_max_pages: int | None):
 
 
 if __name__ == "__main__":
-    logger = init_logging(log_config)
+    init_logging(log_config)
+    logger = get_logger(__name__)
     logger.info("Starting cron pipeline...")
     args = ScraperArguments().init_argparse().parse_args()
     max_pages = args.max_pages if args.max_pages else 5

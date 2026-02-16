@@ -39,7 +39,7 @@ POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
 POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
 POLICE_RESULTS_WITH_FILES = OUTPUT_DIR / "police_res_w_files.json"
 FAILED_POLICE_RESULTS_FP = OUTPUT_DIR / "failed_police_results.txt"
-YEAR_LINKS_FP = OUTPUT_DIR / "year_links1.json"
+YEAR_LINKS_FP = OUTPUT_DIR / "year_links.json"
 JIHOMOR_LINKS_FP = OUTPUT_DIR / "jihomor_links.json"
 
 # aktualne.cz
