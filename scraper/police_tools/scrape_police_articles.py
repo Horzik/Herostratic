@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import json
 import logging
 import re
 import time
@@ -16,9 +15,9 @@ from config import (POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_F
                     PIG_RANKS, DATE_REGEX, ALL_KEYWORDS, FAILED_POLICE_RESULTS_FP,
                     FILES_DIR, ALL_DISTRICTS_FP, ALL_MUNIS_FP)
 from scraper.core import BaseScraper
-from scraper.site_configs import POLICE_SELECTOR, BASE_POLICE_URL
+from scraper.site_configs import BASE_POLICE_URL
 from utils.get_file_type import detect_file_category
-from utils.io_utils import async_json_read, atomic_json_write, async_text_read, read_json
+from utils.io_utils import atomic_json_write, read_json
 from utils.logger import LogConfig, destroy
 from utils.network_utils import FetchError
 from utils.parsing_utils import parse_czech_date
@@ -59,6 +58,8 @@ type FileUrl = str
 type FileName = str
 type FileMetadata = tuple[FileUrl, FileName]
 
+
+# noinspection RegExpUnnecessaryNonCapturingGroup
 class PoliceArticlesScraper(BaseScraper):
     MODULE_NAME = 'scrape_police_articles'
     BASE_URL = BASE_POLICE_URL
@@ -106,7 +107,8 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def parse_date(content_el) -> str | None:
-        """Returns the date as iso string."""
+        """Returns the date as iso string.
+        """
         date_text = None
         for p in content_el:
             text = p.get_text()
@@ -114,13 +116,13 @@ class PoliceArticlesScraper(BaseScraper):
             if match:
                 raw_date = match.group(0).strip()
                 date_text = parse_czech_date(raw_date)
-
         return date_text
 
 
     @staticmethod
     def parse_author(content_el):
-        """Returns the police officers author by parsing for police ranks."""
+        """Returns the police officers author by parsing for police ranks.
+        """
         author_text = None
         for p in content_el:
             text = p.get_text()
@@ -133,7 +135,8 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def resolve_year(arch_cat, date_text):
-        """Category might be a year, if not try parsing the date_text."""
+        """Category might be a year, if not try parsing the date_text.
+        """
         try:
             year = int(arch_cat.strip())
         except ValueError:
@@ -175,7 +178,8 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def extract_content_text(content_el, non_text_els):
-        """Parse the article for the content text."""
+        """Parse the article for the content text.
+        """
         content_text = ''
         for tag in content_el:
             if tag in non_text_els:
@@ -190,7 +194,8 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def collect_non_text_els(title_el, description_el, imgs_el, docs_el) -> set:
-        """Elements to be excluded when parsing the 'content_text'."""
+        """Elements to be excluded when parsing the 'content_text'.
+        """
         non_text_els = set()
         if title_el:
             non_text_els.update(title_el[0])
@@ -204,7 +209,8 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     def select_element_lists(self, soup: BeautifulSoup, url: str, region: str, arch_cat: str):
-        """Returns various tag lists."""
+        """Returns various tag lists.
+        """
         title_el = soup.select('div#content > h1')
         description_el = soup.select('div#content > p:first-of-type')
         content_el = soup.select('div#content')
@@ -238,7 +244,8 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def find_youtube_links(soup) -> list[str] | None:
-        """Goes through the whole soup and looks for 'youtube' links, returns them in a list."""
+        """Goes through the whole soup and looks for 'youtube' links, returns them in a list.
+        """
         text = str(soup)
 
         # Pattern to get the url path for any direct link or inside the iframe ('youtube-nocookie')
@@ -250,6 +257,7 @@ class PoliceArticlesScraper(BaseScraper):
             return None
 
 
+    # todo make into util
     async def download_ytb_video(self, ytb_url, url_path) -> tuple[str, str] | None:
         """Use the 'yt_dlp' lib to download 'youtube' links.
            Returns a tuple of (file_path, file_type).
@@ -262,7 +270,7 @@ class PoliceArticlesScraper(BaseScraper):
             'quiet': True,
         }
         try:
-            # Downloads and returns the video title (used as the file name), wrapped to be non-blocking
+            # Wrapped to be non-blocking, downloads the video and returns the title (used as file name)
             def _download():
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     dl_info = ydl.extract_info(ytb_url, download=True)
@@ -271,16 +279,15 @@ class PoliceArticlesScraper(BaseScraper):
             file_name = await asyncio.to_thread(_download)
             rel_path = str(url_path + '/' + Path(file_name).name)
             return str(rel_path), 'video'
-
         except yt_dlp.utils.DownloadError as e:
             self.logger.error(f"Error downloading a youtube video from: {url_path}...")
             self.logger.error(e)
             return None
 
 
-    # todo make as a util
+    # todo make into util?
     async def download_file(self, file_url, file_name, dir_name) -> tuple[str, str] | None:
-        """Saves target {file_url} bytes as {file_name} at {dir_name}.
+        """Saves target {file_url} bytes as {file_name} in {dir_name}.
         """
         abs_file_path = FILES_DIR / dir_name / file_name # Where to write the file
         rel_file_path = dir_name + '/' + file_name # Stored in PG
@@ -291,7 +298,6 @@ class PoliceArticlesScraper(BaseScraper):
             with open(abs_file_path, 'wb') as f:
                 f.write(file_bytes.getbuffer())
             return str(rel_file_path), file_type
-
         except Exception as e:
             self.logger.error(f"Error downloading file from {dir_name}...")
             self.logger.error(e)
@@ -299,7 +305,8 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     async def parse_gallery_links(self, imgs_el) -> set[FileMetadata]:
-        """Police gallery parser which returns links to the images inside."""
+        """Police gallery parser which returns links to the images inside.
+        """
         links_set: set[FileMetadata] = set()
 
         def _add_gallery_img(soup, _links_set, count):
@@ -344,6 +351,8 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     def parse_docs_links(self, docs_el, sound_el=None) -> set[FileMetadata]:
+        """Parse for police embedded documents, returns links to the imgs/videos/sounds of the article.
+        """
         doc_files: set[FileMetadata] = set()
 
         # Regular doc files are in a list directly on the page.
@@ -362,7 +371,7 @@ class PoliceArticlesScraper(BaseScraper):
             if sound_file_path:
                 sound_file_url = self.BASE_URL + sound_file_path
                 self.logger.debug(f"Sound file url:: {sound_file_url}")
-                sound_file_name = sound_file_path.rsplit('.')[0].rsplit('/')[1]  # The path we get looks like "soubor/vandal-2109-mp3.aspx" ==> get just the unique string in the middle
+                sound_file_name = sound_file_path.rsplit('.')[0].rsplit('/')[1]  # "soubor/vandal-2109-mp3.aspx" ==> get just the unique string in middle
                 self.logger.debug(f"Sound file name:: {sound_file_name}")
                 doc_files.add((sound_file_url, sound_file_name))
 
@@ -496,7 +505,7 @@ class PoliceArticlesScraper(BaseScraper):
         })
 
 
-    def get_scraped_urls(self) -> set[str]:
+    def load_result_urls(self) -> set[str]:
         """Reads the "police_results" and returns a set of only the URLs.
            Used for deduping results, ie to not re-add a result which we already have.
         """
@@ -526,42 +535,9 @@ class PoliceArticlesScraper(BaseScraper):
         muni_set = sorted(self.muni_lookup.keys(), key=len, reverse=True)
         district_set = sorted(self.district_lookup.keys(), key=len, reverse=True)
 
-        # The linter warning are wrong here
-        self.muni_pattern = re.compile(
-            r'\b(?:' + '|'.join(re.escape(m) for m in muni_set) + r')\b' #noqa
-        )
-        self.district_pattern = re.compile(
-            r'\b(?:' + '|'.join(re.escape(d) for d in district_set) + r')\b' #noqa
-        )
-
-
-    def mk_work_items(self):
-        """Loop that pushes items (tuples of input from file) into a queue."""
-        articles_links = read_json(self.INPUT_FILE)
-        scraped_articles = self.get_scraped_urls()
-
-        seen = set() # Safety dedupe
-        work_items = []
-        for region, arch_categories in articles_links.items():
-            for arch_cat, urls_list in arch_categories.items():
-                for url in urls_list:
-                    if url not in scraped_articles and url not in seen:
-                        seen.add(url)
-                        work_items.append((region, arch_cat, url))
-
-        return work_items
-
-
-    async def scrape_site(self, queue, workers, work_items):
-        for item in work_items:
-            await queue.put(item)
-        await queue.join()
-
-        for w in workers:
-            w.cancel()
-
-        if self.results_buffer:
-            await self.flush_buffer()
+        # The linter warning are wrong here, the sets cant be of strings appearently
+        self.muni_pattern = re.compile(r'\b(?:' + '|'.join(re.escape(m) for m in muni_set) + r')\b')
+        self.district_pattern = re.compile(r'\b(?:' + '|'.join(re.escape(d) for d in district_set) + r')\b')
 
 
     async def setup_scrape(self):
@@ -583,7 +559,7 @@ class PoliceArticlesScraper(BaseScraper):
                 except FetchError:
                     self.stats.failed_articles += 1
                     self.write_failed_article(url)
-                except Exception:
+                except Exception: # Catch ValueErrors and anything else
                     self.logger.error(f"Error while scraping '{url}' from '{region}':", exc_info=True)
                     self.stats.failed_articles += 1
                     self.write_failed_article(url)
@@ -592,8 +568,23 @@ class PoliceArticlesScraper(BaseScraper):
                     self.logger.info(f"Processed {self.stats.articles_processed} out of {self.queue_size} articles.")
                     scrape_queue.task_done()
 
+        def _mk_work_items():
+            """Loop that pushes items (tuples of input from file) into a queue."""
+            target_articles = read_json(self.INPUT_FILE)
+            scraped_articles = self.load_result_urls()
+
+            seen = set()  # Keep track to dedupe
+            w_items = []
+            for region, arch_categories in target_articles.items():
+                for arch_cat, urls_list in arch_categories.items():
+                    for url in urls_list:
+                        if url not in scraped_articles and url not in seen:
+                            seen.add(url)
+                            w_items.append((region, arch_cat, url))
+            return w_items
+
         workers = [asyncio.create_task(_worker(queue)) for _ in range(20)]
-        work_items = self.mk_work_items()
+        work_items = _mk_work_items()
         self.queue_size = len(work_items)
         return queue, workers, work_items
 
@@ -603,7 +594,14 @@ class PoliceArticlesScraper(BaseScraper):
         self.load_czech_locations()
         queue, workers, work_items = await self.setup_scrape()
 
-        await self.scrape_site(queue, workers, work_items)
+        for item in work_items:
+            await queue.put(item)
+        await queue.join()
+        for w in workers:
+            w.cancel()
+
+        if self.results_buffer:
+            await self.flush_buffer()
 
         timer_end = time.time()
         formatted_time = str(timedelta(seconds=timer_end - timer_start))
@@ -614,10 +612,8 @@ async def scrape_police_articles():
     async with PoliceArticlesScraper() as ps:
         try:
             await ps.run()
-
         finally:
             destroy()
-
 
 if __name__ == "__main__":
     asyncio.run(scrape_police_articles(), debug=True)
