@@ -82,6 +82,7 @@ class PoliceArticlesScraper(BaseScraper):
         self.cached_results: dict = {}
         self.results_buffer: ResBuffer = []
         self.results_buffer_threshold = 50
+
         self.queue_size = 0
         # Cache for text search
         self.district_lookup = {}

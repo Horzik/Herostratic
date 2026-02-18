@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS articles (
     description TEXT,
     content TEXT NOT NULL,
     search_vector tsvector GENERATED ALWAYS AS (
-        setweight(to_tsvector('czech', coalesce(title, '')), 'A') ||
-        setweight(to_tsvector('czech', coalesce(description, '')), 'B') ||
-        setweight(to_tsvector('czech', coalesce(content, '')), 'C')
+        setweight(to_tsvector('simple', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('simple', coalesce(description, '')), 'B') ||
+        setweight(to_tsvector('simple', coalesce(content, '')), 'C')
     ) STORED,
     db_inserted_at TIMESTAMP DEFAULT NOW()
 );

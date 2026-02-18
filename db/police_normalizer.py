@@ -1,9 +1,11 @@
-from typing import TypedDict
+from dataclasses import dataclass
 
-from config import POLICE_RESULTS_FP, CZECH_MONTHS
+from config import POLICE_RESULTS_FP
 from datetime import date
 
-class DbArticleTable(TypedDict):
+
+@dataclass
+class DbArticleTable:
     source: str
     url: str
     year: int | None
@@ -12,63 +14,74 @@ class DbArticleTable(TypedDict):
     title: str
     description: str | None
     content: str
-    scraped_at: str
 
-class DbLocationTable(TypedDict):
+@dataclass
+class DbLocationTable:
     region: str | None
     district: str | None
     municipality: str | None
 
-class DbFilesTable(TypedDict):
-    file_path: str | None
-    file_type: str | None
+@dataclass
+class DbFile:
+    file_path: str
+    file_type: str
 
-class NormalizedArticleResult(TypedDict):
+@dataclass
+class NormalizedPoliceResult:
     location: DbLocationTable
     article: DbArticleTable
     html_base64: str
     keywords: set[str]
-    article_files: DbFilesTable
+    article_files: list[DbFile]
 
-def isostr_to_date(istr: str) -> date:
-    return date(istr.rstrip("-")[2], istr.rstrip("-")[1], istr.rstrip("-")[0])
 
-def police_normalizer(raw_results):
+# This is just a hotfix for some dates being corrupted (either not correct isostring or bad format all together).
+# Upstream should be already fixed, this is just a safety net
+def parse_date_flexible(date_str: str) -> date | None:
+    if not date_str:
+        return None
+    try:
+        year, month, day = date_str.split('-')
+        return date(int(year), int(month), int(day))
+    except ValueError:
+        return None
+
+
+def police_normalizer(raw_results) -> list[NormalizedPoliceResult]:
     normalized_articles = []
     for region, region_data in raw_results.items():
-        for archive_category, articles in region_data.items():
+        for _, articles in region_data.items():
             for result in articles:
-                year = isostr_to_date(result['year'])
-                article_location: DbLocationTable = {
-                    "region": result["region"],
-                    "district": result["district"],
-                    "municipality": result["municipality"]
-                }
-                article_table_result: DbArticleTable = {
-                    "source": result["source"],
-                    "url": result["url"],
-                    "year": result["year"],
-                    "date": date(result["date"]), # TODO convert to actual 'date' from the iso string
-                    "author": result["author"],
-                    "title": result["title"],
-                    "description": result["description"],
-                    "content": result["content"],
-                    "scraped_at": result["scraped_at"],
-                }
+                article_location = DbLocationTable(
+                    region=result["region"],
+                    district=result["district"],
+                    municipality=result["municipality"]
+                )
+                article_table_result = DbArticleTable (
+                    source = result["source"],
+                    url = result["url"],
+                    year = result["year"],
+                    date= parse_date_flexible(result["date"]),
+                    author = result["author"],
+                    title = result["title"],
+                    description = result["description"],
+                    content = result["content"],
+                )
                 article_html64 = result["html_base64"]
                 article_keywords = result["keywords"]
-                article_files: DbFilesTable = {
-                    "file_path": result["file_path"],
-                    "file_type": result["file_type"]
-                }
 
-                normalized_result: NormalizedArticleResult = {
-                    "location": article_location,
-                    "article": article_table_result,
-                    "keywords": article_keywords,
-                    "article_files": article_files,
-                    "html_base64": article_html64,
-                }
+                # Make a list of the files (empty list if None)
+                raw_files = [f for f in (result["files"] or []) if f is not None]
+                article_files = [DbFile(file_path=fp, file_type=ft) for fp, ft in raw_files]
+
+                normalized_result = NormalizedPoliceResult(
+                    location=article_location,
+                    article=article_table_result,
+                    html_base64=article_html64,
+                    keywords=article_keywords,
+                    article_files=article_files,
+                )
+
                 # Add the result and continue with others
                 normalized_articles.append(normalized_result)
 
