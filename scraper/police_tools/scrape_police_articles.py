@@ -11,9 +11,10 @@ from io import BytesIO
 from pathlib import Path
 from typing import TypedDict
 
-from config import (POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP,
-                    PIG_RANKS, DATE_REGEX, ALL_KEYWORDS, FAILED_POLICE_RESULTS_FP,
-                    FILES_DIR, ALL_DISTRICTS_FP, ALL_MUNIS_FP)
+from config import (
+    POLICE_ARTICLES_FP, LOG_DIR, ERRORS_LOG_FP, POLICE_RESULTS_FP,
+    PIG_RANKS, DATE_REGEX, ALL_KEYWORDS, FAILED_POLICE_RESULTS_FP,
+    FILES_DIR, ALL_DISTRICTS_FP, ALL_MUNIS_FP)
 from scraper.core import BaseScraper
 from scraper.site_configs import BASE_POLICE_URL
 from utils.get_file_type import detect_file_category
@@ -107,8 +108,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def parse_date(content_el) -> str | None:
-        """Returns the date as iso string.
-        """
+        """Returns the date as iso string."""
         date_text = None
         for p in content_el:
             text = p.get_text()
@@ -121,8 +121,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def parse_author(content_el):
-        """Returns the police officers author by parsing for police ranks.
-        """
+        """Returns the police officer author by parsing for police ranks."""
         author_text = None
         for p in content_el:
             text = p.get_text()
@@ -135,8 +134,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def resolve_year(arch_cat, date_text):
-        """Category might be a year, if not try parsing the date_text.
-        """
+        """Try getting the year from category, then try from date."""
         try:
             year = int(arch_cat.strip())
         except ValueError:
@@ -148,8 +146,7 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     def resolve_archive_category(self, arch_cat, date_text, soup, url, region):
-        """Fed 'arch_cat' be either a year or string 'non_years'. Try resolving to a year.
-        """
+        """Fed 'arch_cat' be either a year or the string 'non_years'. Try resolving to a year."""
         if arch_cat == "non_years" and date_text is not None:
             arch_cat = str(date_text[:4])
         elif arch_cat == "non_years" and date_text is None:
@@ -164,8 +161,7 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     def match_location(self, title, description, content_text) -> tuple[str | None, str | None]:
-        """First use the pattern to find and matches in a text. Then use the lookups to find the nominative.
-        """
+        """First use the pattern to find and matches in a text. Then use the lookups to find the nominative."""
         full_text = f"{title}\n{description}\n{content_text}".lower()
         district_match = self.district_pattern.search(full_text)
         muni_match = self.muni_pattern.search(full_text)
@@ -178,8 +174,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def extract_content_text(content_el, non_text_els):
-        """Parse the article for the content text.
-        """
+        """Parse the article for the content text."""
         content_text = ''
         for tag in content_el:
             if tag in non_text_els:
@@ -209,8 +204,7 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     def select_element_lists(self, soup: BeautifulSoup, url: str, region: str, arch_cat: str):
-        """Returns various tag lists.
-        """
+        """Returns various tag lists."""
         title_el = soup.select('div#content > h1')
         description_el = soup.select('div#content > p:first-of-type')
         content_el = soup.select('div#content')
@@ -244,8 +238,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     @staticmethod
     def find_youtube_links(soup) -> list[str] | None:
-        """Goes through the whole soup and looks for 'youtube' links, returns them in a list.
-        """
+        """Goes through the whole soup and looks for 'youtube' links, returns them in a list."""
         text = str(soup)
 
         # Pattern to get the url path for any direct link or inside the iframe ('youtube-nocookie')
@@ -287,8 +280,7 @@ class PoliceArticlesScraper(BaseScraper):
 
     # todo make into util?
     async def download_file(self, file_url, file_name, dir_name) -> tuple[str, str] | None:
-        """Saves target {file_url} bytes as {file_name} in {dir_name}.
-        """
+        """Saves target {file_url} bytes as {file_name} in {dir_name}."""
         abs_file_path = FILES_DIR / dir_name / file_name # Where to write the file
         rel_file_path = dir_name + '/' + file_name # Stored in PG
 
@@ -305,8 +297,7 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     async def parse_gallery_links(self, imgs_el) -> set[FileMetadata]:
-        """Police gallery parser which returns links to the images inside.
-        """
+        """Police gallery parser which returns links to the images inside."""
         links_set: set[FileMetadata] = set()
 
         def _add_gallery_img(soup, _links_set, count):
@@ -351,8 +342,7 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     def parse_docs_links(self, docs_el, sound_el=None) -> set[FileMetadata]:
-        """Parse for police embedded documents, returns links to the imgs/videos/sounds of the article.
-        """
+        """Parse for police embedded documents, returns links to the imgs/videos/sounds of the article."""
         doc_files: set[FileMetadata] = set()
 
         # Regular doc files are in a list directly on the page.

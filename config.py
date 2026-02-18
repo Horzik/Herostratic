@@ -27,6 +27,7 @@ NOSITEMAPS_FP = OUTPUT_DIR / "nositemaps.txt"
 ARTICLES_FP = OUTPUT_DIR / "articles3.json"
 HTML_FP = OUTPUT_DIR / "index.html"
 DEDUPED_FP = OUTPUT_DIR / "deduped.json"
+REGIONS_FP = OUTPUT_DIR / "regions.json"
 DISTRICTS_FP = OUTPUT_DIR / "districts.txt"
 MUNICIPALITIES_FP = OUTPUT_DIR / "municipalities.txt"
 ALL_MUNIS_FP = OUTPUT_DIR / "all_munis.txt"
@@ -59,7 +60,7 @@ METRO_IMG_FP = OUTPUT_DIR / ""
 # Parsing and scraping filters and keywords
 URL_KEYWORDS = ['spray', 'sprey', 'sprej', 'graffiti', 'grafiti', 'grafity',
                 'vandal', 'cmaral', 'mural', 'street art', 'street-art']  # todo rename this variable (its used when *parsing for urls*)
-ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'sprej', 'lept']
+ARTICLE_KEYWORDS = ['metro', 'vlak', 'tramvaj', 'bus', 'autobus', 'fix', 'lept']
 ALL_KEYWORDS = URL_KEYWORDS + ARTICLE_KEYWORDS
 DECODE_FORMATS = ['utf-8', 'windows-1250', 'iso-8859-2']
 EXCLUDE_ARCHIVE_KEYWORDS = ['nehody', 'násil', 'nasil']
