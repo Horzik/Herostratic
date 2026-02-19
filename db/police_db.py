@@ -150,26 +150,36 @@ async def insert_article_files(db_conn, article_id, file_path, file_type):
 
 async def create_indices(db_conn):
     await db_conn.execute("""
-            CREATE INDEX idx_articles_location_id ON articles(location_id);
-            CREATE INDEX idx_article_keyword_id ON article_keywords(keyword_id);
-            CREATE INDEX idx_articles_search_vector ON articles USING GIN(search_vector);
-        """
+        CREATE INDEX idx_articles_location_id ON articles(location_id);
+        CREATE INDEX idx_article_keyword_id ON article_keywords(keyword_id);
+        CREATE INDEX idx_articles_search_vector ON articles USING GIN(search_vector);
+    """
     )
+
+
+async def get_files(db_conn):
+    ids = await db_conn.fetch("""SELECT id, title FROM articles;""")
+    files = await db_conn.fetch("""SELECT article_files FROM article_files;""")
+    return ids, files
 
 
 DB_ADDRESS = f"postgresql://postgres@localhost:5432/herostratic"
 class PgConn:
     def __init__(self, address):
         self.address = address
+        self.pool = None
         self.conn = None
 
     async def __aenter__(self):
-        self.conn = await asyncpg.connect(self.address)  # postgres@localhost/test
+        self.pool = await asyncpg.create_pool(self.address) # postgres@localhost/test
+        self.conn = await self.pool.acquire()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.conn:
-            await self.conn.close()
+            await self.pool.release(self.conn)
+        if self.pool:
+            await self.pool.close()
 
 
 class PoliceSql(PgConn):
@@ -184,6 +194,7 @@ class PoliceSql(PgConn):
         super().__init__(address=address) # Give the inner asyncpg an address to be aentered with
         init_logging(self.LOG_CONFIG)
         self.logger: Logger = get_logger('police_db')
+        self.semaphore: asyncio.Semaphore = asyncio.Semaphore(10)
 
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -201,11 +212,6 @@ class PoliceSql(PgConn):
         return normalized_results
 
 
-    async def run_sql_command(self, sql: str):
-        self.logger.info(f"Executing SQL: {sql}")
-        await self.conn.execute(sql)
-
-
     async def mk_default_db(self, sql: str=CREATE_POLICE_SQL_SCHEMA, kws: list[str]=ALL_KEYWORDS):
         self.logger.info(f"Creating database at {self.address}")
         await self.conn.execute(sql)
@@ -215,50 +221,53 @@ class PoliceSql(PgConn):
 
     async def insert_police_article(self, location, article, html, kws, files):
         self.logger.debug("Inserting article...")
-        async with self.conn.transaction():
-            # First get id or None from 'locations'
-            location_id = await insert_article_locations(
-                self.conn,
-                location.region,
-                location.district,
-                location.municipality
-            )
+        async with self.semaphore:
+            async with self.pool.acquire() as conn:
+                async with conn.transaction():
+                    # First get id or None from 'locations'
+                    location_id = await insert_article_locations(
+                        conn,
+                        location.region,
+                        location.district,
+                        location.municipality
+                    )
 
-            # Use the location ID for the main data insert
-            article_id = await insert_article_data(self.conn, location_id, article)
-            # Use article ID for the HTML insert
-            await insert_article_html(self.conn, article_id, html)
+                    # Again get id or None from 'article'
+                    article_id = await insert_article_data(conn, location_id, article)
+                    if article_id is None:
+                        self.logger.info(f"Article already exists, skipping: {article.url}")
+                        return
 
-            # Insert article keywords and article files
-            for kw in kws:
-                await insert_article_keyword(self.conn, article_id, kw)
-            for file in files:
-                await insert_article_files(self.conn, article_id, file.file_path, file.file_type)
-            self.logger.debug(f"Inserted police article id: <{article_id}>")
+                    # Use article ID for HTML insert
+                    await insert_article_html(conn, article_id, html)
+
+                    # Insert article keywords and files
+                    for kw in kws:
+                        await insert_article_keyword(conn, article_id, kw)
+                    for file in files:
+                        await insert_article_files(conn, article_id, file.file_path, file.file_type)
+                    self.logger.debug(f"Inserted police article id: <{article_id}>")
 
 
-    async def insert_multiple_police_articles(self, arts: list[NormalizedPoliceResult]):
-        for art in arts:
-            await self.insert_police_article(
+async def insert_police_results():
+    async with PoliceSql(address=DB_ADDRESS) as db:
+        db.logger.info('Running PoliceDb main...')
+        norm_pol_res = await db.normalize_results('policie')
+        await asyncio.gather(*[
+            db.insert_police_article(
                 art.location,
                 art.article,
                 art.html_base64,
                 art.keywords,
                 art.article_files
-            )
+            ) for art in norm_pol_res
+        ])
+        db.logger.info('Exiting PoliceDb main...')
 
 async def main():
     async with PoliceSql(address=DB_ADDRESS) as db:
         db.logger.info('Running PoliceDb main...')
-        norm_pol_res = await db.normalize_results('policie')
-        art = norm_pol_res[0]
-        await db.insert_police_article(
-            art.location,
-            art.article,
-            art.html_base64,
-            art.keywords,
-            art.article_files
-        )
+        db.logger.info('Exiting PoliceDb main...')
 
 if __name__ == "__main__":
     asyncio.run(main())

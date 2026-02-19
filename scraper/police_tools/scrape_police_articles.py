@@ -26,7 +26,7 @@ from utils.parsing_utils import parse_czech_date
 
 class PoliceArticleResult(TypedDict):
     source: str
-    archive_category: str  # Can be either a year or district/city
+    archive_category: str  # year or 'non_years'
     url: str
     title: str
     year: int | None
@@ -82,9 +82,7 @@ class PoliceArticlesScraper(BaseScraper):
         self.cached_results: dict = {}
         self.results_buffer: ResBuffer = []
         self.results_buffer_threshold = 50
-
-        self.queue_size = 0
-        # Cache for text search
+        # Cache for location search
         self.district_lookup = {}
         self.muni_lookup = {}
         self.muni_pattern: re.Pattern | None = None
@@ -252,29 +250,27 @@ class PoliceArticlesScraper(BaseScraper):
 
 
     # todo make into util
-    async def download_ytb_video(self, ytb_url, url_path) -> tuple[str, str] | None:
+    async def download_ytb_video(self, ytb_url, dir_name) -> tuple[str, str] | None:
         """Use the 'yt_dlp' lib to download 'youtube' links.
            Returns a tuple of (file_path, file_type).
         """
         import yt_dlp
-        abs_dir: Path = FILES_DIR / url_path
-        opts = {
-            'outtmpl': str(abs_dir / '%(title)s.%(ext)s'),
-            'format': 'best[height<=720]',
-            'quiet': True,
-        }
-        try:
-            # Wrapped to be non-blocking, downloads the video and returns the title (used as file name)
-            def _download():
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    dl_info = ydl.extract_info(ytb_url, download=True)
-                    return ydl.prepare_filename(dl_info)
+        abs_dir: Path = FILES_DIR / dir_name
+        opts = {'outtmpl': str(abs_dir / '%(title)s.%(ext)s'), 'format': 'best[height<=720]', 'quiet': True}
 
+        # Wrapper for non-blocking downloads, returns the title (used as file name)
+        def _download():
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                dl_info = ydl.extract_info(ytb_url, download=True)
+                f_name = ydl.prepare_filename(dl_info)
+                return f_name
+
+        try:
             file_name = await asyncio.to_thread(_download)
-            rel_path = str(url_path + '/' + Path(file_name).name)
+            rel_path = str(dir_name + '/' + Path(file_name).name)
             return str(rel_path), 'video'
         except yt_dlp.utils.DownloadError as e:
-            self.logger.error(f"Error downloading a youtube video from: {url_path}...")
+            self.logger.error(f"Error downloading a youtube video from: {dir_name}...")
             self.logger.error(e)
             return None
 
@@ -376,7 +372,7 @@ class PoliceArticlesScraper(BaseScraper):
         files_results: list[tuple[str, str]] = []
         dir_name = re.search(r'/([^/]+)\.[^.]+$', url).group(1).strip()
 
-        # First get any 'youtube' links.
+        # First get 'youtube' links
         ytb_urls = self.find_youtube_links(soup)
         if ytb_urls:
             for ytb_url in ytb_urls:
@@ -384,15 +380,14 @@ class PoliceArticlesScraper(BaseScraper):
                 if dl_res:
                     files_results.append(dl_res)
 
-        # Then get 'policie.cz' specific files.
+        # Then get 'policie.cz'-specific files
         gallery_links = set()
         docs_links = set()
         if imgs_el:
             gallery_links = await self.parse_gallery_links(imgs_el[0])
         if docs_el:
             docs_links = self.parse_docs_links(docs_el[0], sound_el[0] if sound_el else None)
-
-        # Download any links we get
+        # Download any links we found
         files_links = gallery_links | docs_links
         if files_links:
             # Make the target dir if needed.
@@ -526,7 +521,7 @@ class PoliceArticlesScraper(BaseScraper):
         muni_set = sorted(self.muni_lookup.keys(), key=len, reverse=True)
         district_set = sorted(self.district_lookup.keys(), key=len, reverse=True)
 
-        # The linter warning are wrong here, the sets cant be of strings appearently
+        # The linter warning are wrong here, not sure why, but it works
         self.muni_pattern = re.compile(r'\b(?:' + '|'.join(re.escape(m) for m in muni_set) + r')\b')
         self.district_pattern = re.compile(r'\b(?:' + '|'.join(re.escape(d) for d in district_set) + r')\b')
 
@@ -534,7 +529,7 @@ class PoliceArticlesScraper(BaseScraper):
     async def setup_scrape(self):
         queue = asyncio.Queue()
 
-        async def _worker(scrape_queue: asyncio.Queue):
+        async def _worker(scrape_queue: asyncio.Queue, queue_size: int):
             """Listens for input from queue. Manages the buffer writes. """
             while True:
                 region, archive_category, url = await scrape_queue.get()
@@ -547,6 +542,7 @@ class PoliceArticlesScraper(BaseScraper):
                     if len(self.results_buffer) > self.results_buffer_threshold:
                         self.logger.info(f"Writing from a buffer...")
                         await self.flush_buffer()
+
                 except FetchError:
                     self.stats.failed_articles += 1
                     self.write_failed_article(url)
@@ -556,7 +552,7 @@ class PoliceArticlesScraper(BaseScraper):
                     self.write_failed_article(url)
                 finally:
                     self.stats.articles_processed += 1
-                    self.logger.info(f"Processed {self.stats.articles_processed} out of {self.queue_size} articles.")
+                    self.logger.info(f"Processed {self.stats.articles_processed} out of {queue_size} articles.")
                     scrape_queue.task_done()
 
         def _mk_work_items():
@@ -574,17 +570,19 @@ class PoliceArticlesScraper(BaseScraper):
                             w_items.append((region, arch_cat, url))
             return w_items
 
-        workers = [asyncio.create_task(_worker(queue)) for _ in range(20)]
         work_items = _mk_work_items()
-        self.queue_size = len(work_items)
+        queue_len = len(work_items)
+        workers = [asyncio.create_task(_worker(queue, queue_len)) for _ in range(20)]
         return queue, workers, work_items
 
 
     async def run(self):
+        # Setup
         timer_start = time.time()
         self.load_czech_locations()
         queue, workers, work_items = await self.setup_scrape()
 
+        # Fill the queue, run the tasks, kill the workers
         for item in work_items:
             await queue.put(item)
         await queue.join()

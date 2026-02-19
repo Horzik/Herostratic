@@ -35,9 +35,9 @@ class NormalizedPoliceResult:
     article_files: list[DbFile]
 
 
-# This is just a hotfix for some dates being corrupted (either not correct isostring or bad format all together).
-# Upstream should be already fixed, this is just a safety net
-def parse_date_flexible(date_str: str) -> date | None:
+# Hotfix for some dates being corrupted (either invalid isostring or bad format all together).
+# Upstream cause should be already fixed, keep this as a safety net
+def parse_date_fix(date_str: str) -> date | None:
     if not date_str:
         return None
     try:
@@ -61,7 +61,7 @@ def police_normalizer(raw_results) -> list[NormalizedPoliceResult]:
                     source = result["source"],
                     url = result["url"],
                     year = result["year"],
-                    date= parse_date_flexible(result["date"]),
+                    date= parse_date_fix(result["date"]),
                     author = result["author"],
                     title = result["title"],
                     description = result["description"],
