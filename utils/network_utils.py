@@ -6,12 +6,16 @@ from config import MAX_RETRIES, POPO_TIMEOUT, TIMEOUT
 from utils.logger import get_logger
 
 
+class SoupError(Exception):
+    def __init__(self, url):
+        self.url = url
+        super().__init__(f"Exception getting soup for url: '{url}'")
+
 class FetchError(Exception):
     def __init__(self, url: str, status: int):
         self.url = url
         self.status = status
         super().__init__(f"HTTP {status} for '{url}'")
-
 
 # Returns a new ClientSession with default config
 def create_session():
@@ -29,28 +33,25 @@ def create_session():
         }
     )
 
-# TODO adaptive semaphore or other adaptive rate-limit prevention, leaky bucket
-# todo 'aiolimiter', 'httpx.AsyncClient()'
 
 
-# Function to fetch target url and return its bytes
-async def get_bytes(
-    url: str,
-    session: aiohttp.ClientSession,
-    semaphore: asyncio.Semaphore,
-    gov_site=False,
-    verify=True
+
+# todo adaptive semaphore or other adaptive rate-limit prevention
+# todo leaky bucket ('aiolimiter', 'httpx.AsyncClient()'), TTFB (increase semaphore count OR outgoing requests)
+async def get_bytes(url: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, gov_site=False, verify=True
 ) -> bytes | None:
+    """ Helper for fetching bytes.
+        Retry strategy (with backoff as 'wait_time').
+    """
     logger = get_logger('network')
     timeout = POPO_TIMEOUT if gov_site else TIMEOUT
     async with semaphore:
         for attempt in range(MAX_RETRIES):
-            # Be little nice, sleep by default and wait on retries
-            await asyncio.sleep(random.uniform(0.3, 0.5))
+            await asyncio.sleep(random.uniform(0.3, 0.5)) # Be little nice, sleep by default and wait on retries
             wait_time = 3 ** attempt
-            # todo use the TTFB for congestion control (increase semaphore count OR outgoing requests)
             try:
                 async with session.get(url=url, timeout=aiohttp.ClientTimeout(total=timeout), verify_ssl=verify) as response:
+
                     # todo abstract the response handling?
                     if response.status == 200:
                         content_bytes = await response.read()
@@ -101,6 +102,6 @@ async def get_bytes(
                 logger.warning(f"Retrying after {wait_time + jitter:.1f}s...")
                 await asyncio.sleep(wait_time + jitter)
             else:
-                logger.error(f"Failed parsing '{url}', all tries exhausted")
-                return None
+                logger.error(f"Failed fetching '{url}', all tries exhausted")
+                raise FetchError(url, 400)
         return None

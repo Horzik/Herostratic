@@ -6,7 +6,7 @@ from pathlib import Path
 
 from utils.io_utils import atomic_json_write, CriticalDataError
 from utils.logger import LogConfig, init_logging, get_logger
-from utils.network_utils import create_session, get_bytes, FetchError
+from utils.network_utils import create_session, get_bytes, FetchError, SoupError
 
 
 class BaseScraper(ABC):
@@ -44,25 +44,29 @@ class BaseScraper(ABC):
 
 
     async def fetch(self, url: str, gov_site=False) -> bytes | None:
-        """Wrapper for fetching to hide the session and semaphore."""
-        try:
-            return await get_bytes(url, self._session, self._semaphore, gov_site)
-        except FetchError:
-            raise
+        """ Wrapper for fetching to hide the session and semaphore.
+        """
+        return await get_bytes(url, self._session, self._semaphore, gov_site)
 
 
     async def get_soup(self, url: str) -> BeautifulSoup | None:
-        """Helper for getting the soup. Uses the class 'fetch' method."""
-        page_bytes = await self.fetch(url, gov_site=self.GOV_SITE)
-        if page_bytes is None:
+        """ Helper for getting the soup. Uses the class 'fetch' method.
+        """
+        try:
+            page_bytes = await self.fetch(url, gov_site=self.GOV_SITE)
+            if page_bytes is None: # todo this should basically never happen, make it better
+                raise SoupError(url)
+            return BeautifulSoup(page_bytes, 'lxml')
+
+        # If we get fetch error during soup retrieval, just return None (so the whole article scrape doesn't fail)
+        except FetchError:
+            self.logger.error(f"Error getting soup for url: {url}, returning None")
             return None
-        return BeautifulSoup(page_bytes, 'lxml')
 
 
     def write_results(self, data: dict | list) -> None:
-        # TODO uses async lock but isn't async, also probably pointless to use the lock here anyways
-        """Default write method. Only useful with basic scrapers, other
-           ones need an override to a more concrete method of writing.
+        """ Default write method. Only useful with basic scrapers, other
+            ones need an override to a more concrete method of writing.
         """
         try:
             with self.lock:
@@ -72,16 +76,15 @@ class BaseScraper(ABC):
 
 
     async def get_existing_urls(self):
-        """Implement based on the OUTPUT_FILE structure. \n
-           Use for deduping logic.
+        """ Implement based on the OUTPUT_FILE structure. \n
+            Use for deduping logic.
         """
         raise NotImplementedError
 
 
-    # todo if we want to use this, it should probably validate a list of all required elements
+    # todo use or remove
     async def validate_elements(self, url: str, el_list) -> bool:
-        """Validates an element in the url's html is selectable by the Soup.
-           Optional to pass in the soup directly.
+        """ Validates a list of elements selected from the Soup.
         """
         try:
             for i, el in enumerate(el_list):

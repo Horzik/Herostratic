@@ -156,6 +156,12 @@ async def create_indices(db_conn):
     """
     )
 
+async def get_articles_count(db_conn):
+    await db_conn.fetcheval("""
+        SELECT id FROM articles
+    """
+    )
+
 
 async def get_files(db_conn):
     ids = await db_conn.fetch("""SELECT id, title FROM articles;""")
@@ -165,10 +171,10 @@ async def get_files(db_conn):
 
 DB_ADDRESS = f"postgresql://postgres@localhost:5432/herostratic"
 class PgConn:
-    def __init__(self, address):
+    def __init__(self, address=DB_ADDRESS):
         self.address = address
-        self.pool = None
-        self.conn = None
+        self.pool = None # get on enter
+        self.conn = None # get on enter
 
     async def __aenter__(self):
         self.pool = await asyncpg.create_pool(self.address) # postgres@localhost/test
@@ -250,7 +256,7 @@ class PoliceSql(PgConn):
 
 
 async def insert_police_results():
-    async with PoliceSql(address=DB_ADDRESS) as db:
+    async with PoliceSql() as db:
         db.logger.info('Running PoliceDb main...')
         norm_pol_res = await db.normalize_results('policie')
         await asyncio.gather(*[
@@ -265,7 +271,7 @@ async def insert_police_results():
         db.logger.info('Exiting PoliceDb main...')
 
 async def main():
-    async with PoliceSql(address=DB_ADDRESS) as db:
+    async with PoliceSql() as db:
         db.logger.info('Running PoliceDb main...')
         db.logger.info('Exiting PoliceDb main...')
 
