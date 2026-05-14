@@ -8,7 +8,7 @@ from datetime import date
 class DbArticleTable:
     source: str
     url: str
-    year: int | None
+    year: str | int | None # todo
     date: date | None
     author: str | None
     title: str
@@ -36,6 +36,7 @@ class NormalizedPoliceResult:
 
 
 # Hotfix for some dates being corrupted (either invalid isostring or bad format all together).
+# TODO doesnt work I guess
 # Upstream cause should be already fixed, keep this as a safety net
 def parse_date_fix(date_str: str) -> date | None:
     if not date_str:
@@ -81,14 +82,21 @@ def police_normalizer(raw_results) -> list[NormalizedPoliceResult]:
                     keywords=article_keywords,
                     article_files=article_files,
                 )
-
                 # Add the result and continue with others
                 normalized_articles.append(normalized_result)
-
     return normalized_articles
+
 
 NormalizerStrategies = [
     ('policie', POLICE_RESULTS_FP, police_normalizer),
     # ('aktualne', AKT_ART_FP, aktualne_norm),
     # ('metro', METRO_ARTICLES_FP, metro_norm)
 ]
+
+def db_domain_strat(domain: str) -> tuple | None:
+    """ Fetch the appropriate file path and a normalizer function for the target domain.
+    """
+    for key, fp, strat in NormalizerStrategies:
+        if key == domain:
+            return fp, strat
+    return None
