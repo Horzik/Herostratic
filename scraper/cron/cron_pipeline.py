@@ -7,6 +7,7 @@ from scraper.police_tools.get_police_articles import get_police_articles
 from scraper.police_tools.scrape_police_articles import scrape_police_articles
 from utils.logger import LogConfig, init_logging, destroy, get_logger
 
+
 log_config = LogConfig(
     log_level=logging.DEBUG,
     log_std_level=logging.DEBUG,

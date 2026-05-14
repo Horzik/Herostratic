@@ -95,16 +95,12 @@ class AktualneArticlesScraper(BaseScraper):
 
     async def parse_html(self, url: str) -> ScrapeResult:
         soup = await self.get_soup(url)
-        if not soup:
-            self.logger.error(f"Error making the soup for url: '{url}'")
-            raise Exception
-
         title_el = soup.select_one('h1.article-title')
         if not title_el:
             self.logger.error(f"Error parsing the title for url: '{url}'")
             raise Exception
-        title_text = title_el.text.strip()
 
+        title_text = title_el.text.strip()
         author_el = soup.select_one('a.author__name')
         author_text = author_el.text.strip() if author_el else None
         date_el = soup.select_one('div.author__date')
@@ -113,7 +109,7 @@ class AktualneArticlesScraper(BaseScraper):
         keywords = list(set(key for key in ALL_KEYWORDS
                         if key in url or key in content_text)
         )
-        page_bytes = await self.fetch(url)
+        page_bytes = await self.fetch(url) # Getting bytes from "get_soup" requires unwanted changes, just re-fetch
 
         result: ScrapeResult = {
             'source': 'aktualne',

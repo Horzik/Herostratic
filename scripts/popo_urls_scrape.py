@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from config import LOG_DIR, ERRORS_LOG_FP
-from trash_bin.get_police_articles import get_police_articles
+from scraper.police_tools.get_police_articles import get_police_articles
 from utils.logger import init_logging, get_logger, LogConfig
 from utils.network_utils import create_session
 
@@ -16,6 +16,10 @@ init_logging(logConfig)
 logger = get_logger('scrape_urls')
 
 
+""" This can be used to feed a list of police urls to scrape directly from the terminal
+    
+"""
+# TODO add as functionality to the scrapers
 async def parse_urls(urls_list: list[str]):
     semaphore = asyncio.Semaphore(10)
     file_lock = asyncio.Lock()
@@ -39,7 +43,6 @@ async def parse_urls(urls_list: list[str]):
             sucess_tasks += 1
 
         logger.info(f"Successfully parsed {sucess_tasks}/{failed_tasks} articles")
-
 
 def main():
     parser = argparse.ArgumentParser(description='Scrape police_tools articles')

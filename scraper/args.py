@@ -2,16 +2,14 @@ import argparse
 
 
 class ScraperArguments:
-
     @staticmethod
     def init_argparse():
         p = argparse.ArgumentParser(
             prog='scraper',
-            description='Issa scraper',
+            description='Graffiti news articles scraper.',
             epilog="Help",
             formatter_class=argparse.RawTextHelpFormatter
         )
-
         p.add_argument(
             "--cron",
             "-cr",
@@ -19,7 +17,6 @@ class ScraperArguments:
             action='store_true',
             help='''Run a scraper as a cron job'''
         )
-
         p.add_argument(
             "--max_pages",
             "-mp",
@@ -27,5 +24,4 @@ class ScraperArguments:
             type=int,
             help='''Define how many article listing pages the scraper should check'''
         )
-
         return p

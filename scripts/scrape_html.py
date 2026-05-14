@@ -10,7 +10,7 @@ from utils.network_utils import get_bytes
 from config import HTML_FP, LOG_DIR, ERRORS_LOG_FP
 
 
-# We can parse just one site atm
+# We scrape just one site atm
 POLICE_ARCHIVE = "https://policie.gov.cz/clanek/zpravodajstvi-archiv-zpravodajstvi-zpravodajstvi-archiv.aspx"
 POLICE_ARTICLE = "https://policie.gov.cz/clanek/loupezne-prepadeni-v-decine.aspx"
 URL = "https://policie.gov.cz/clanek/zpravodajstvi-krajskeho-reditelstvi-policie-kraje-vysocina.aspx"

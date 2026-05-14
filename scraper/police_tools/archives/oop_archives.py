@@ -14,14 +14,9 @@ from utils.io_utils import atomic_json_write, CriticalDataError
 from utils.logger import LogConfig, destroy
 
 
-""" 
-    Checks the input municipalities 'homepages' and returns their corresponding archive pages
-    This is the first refactored module, maybe not best practices, revisit...
-"""
-# todo => make a module that goes to BASE_URL and gets the POLICE_SITES
-# todo 2 ==> verify we get the correct links (can we?)
-# todo 3 ==> log all processed and failed archives
 class ScrapeArchive(BaseScraper):
+    """ Checks the input municipalities 'homepages' and returns their corresponding archive pages.
+    """
     MODULE_NAME = 'police_archives'
     BASE_URL = BASE_POLICE_URL
     INPUT_FILE = POLICE_SITES_FP
