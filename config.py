@@ -37,7 +37,7 @@ ALL_DISTRICTS_FP = OUTPUT_DIR / "all_districts.txt"
 # policie.cz
 POLICE_ARCHIVES_FP = OUTPUT_DIR / "police_archives.json"
 POLICE_ARTICLES_FP = OUTPUT_DIR / "police_articles.json"
-POLICE_RESULTS_FP = OUTPUT_DIR / "police_results3.json"
+POLICE_RESULTS_FP = OUTPUT_DIR / "police_results.json"
 POLICE_RESULTS_WITH_FILES = OUTPUT_DIR / "police_res_w_files.json"
 FAILED_POLICE_RESULTS_FP = OUTPUT_DIR / "failed_police_results.txt"
 YEAR_LINKS_FP = OUTPUT_DIR / "year_links.json"
@@ -79,6 +79,7 @@ SITEMAP_INDEX_EL = f".//{SITEMAP_NS}loc"
 MAX_RETRIES = 3
 TIMEOUT = 10
 POPO_TIMEOUT = 40
+VIDEO_TIMEOUT = 500
 
 # Various
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m3u8'}
