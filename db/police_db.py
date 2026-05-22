@@ -5,7 +5,7 @@ from logging import Logger
 import asyncpg
 
 from config import LOG_DIR, ERRORS_LOG_FP
-from db.police_normalizer import NormalizedPoliceResult, db_domain_strat, DbArticleTable
+from db.police_normalizer import NormalizedPoliceResult, db_domain_strat
 from db.queries import insert_article_locations, insert_article_data, insert_article_html, insert_article_keyword, \
     insert_article_files
 from utils.io_utils import async_json_read
@@ -67,9 +67,10 @@ class PoliceSql(PgConn):
                     )
                     article_id = await insert_article_data(conn, location_id, article)
                     if article_id is None:
-                        self.logger.info(f"Article already exists, skipping: {article.url}")
+                        # self.logger.info(f"Article already exists, skipping: {article.url}")
                         return
                     # Use article ID for HTML insert
+                    self.logger.info(f"Inserting article url: '{article.url}'")
                     await insert_article_html(conn, article_id, html)
                     # Insert article keywords and files
                     for kw in kws:
@@ -78,30 +79,16 @@ class PoliceSql(PgConn):
                         await insert_article_files(conn, article_id, file.file_path, file.file_type)
                     self.logger.debug(f"Inserted police article id: <{article_id}>")
 
-
-# todo argparse?
-async def insert_police_results():
-    """ Entry point for running the insertion pipeline.
-    """
-    async with PoliceSql() as db:
-        db.logger.info('Running PoliceDb main...')
-        norm_pol_res = await db.normalize_results('policie')
+    async def insert_police_results(self):
+        self.logger.info('Running PoliceDb main...')
+        norm_pol_res = await self.normalize_results('policie')
         await asyncio.gather(*[
-            db.insert_police_article(
+            self.insert_police_article(
                 art.location,
                 art.article,
-                art.html_base64,
+                art.html,
                 art.keywords,
                 art.article_files
             ) for art in norm_pol_res
         ])
-        db.logger.info('Exiting PoliceDb main...')
-
-
-async def main():
-    async with PoliceSql() as db:
-        db.logger.info('Running PoliceDb main...')
-        db.logger.info('Exiting PoliceDb main...')
-
-if __name__ == "__main__":
-    asyncio.run(insert_police_results())
+        self.logger.info('Exiting PoliceDb main...')

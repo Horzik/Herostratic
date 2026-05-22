@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS articles (
     url TEXT NOT NULL unique,
     year INTEGER,
     date DATE,
-    author VARCHAR(100),
+    author TEXT,
     title TEXT NOT NULL,
     description TEXT,
     content TEXT NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS articles (
 
 CREATE TABLE IF NOT EXISTS article_html (
     article_id INTEGER PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
-    html_base64 TEXT NOT NULL
+    html TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS keywords (

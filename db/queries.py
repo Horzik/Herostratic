@@ -66,3 +66,10 @@ async def insert_article_files(db_conn, article_id, file_path, file_type):
         ON CONFLICT DO NOTHING
     """, article_id, file_path, file_type
     )
+
+
+async def select_article_urls(db_conn):
+    return await db_conn.fetch("""
+        SELECT url FROM articles;
+    """,
+    )

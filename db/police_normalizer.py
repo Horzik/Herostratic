@@ -3,12 +3,14 @@ from dataclasses import dataclass
 from config import POLICE_RESULTS_FP
 from datetime import date
 
+from db.tools.police_art_cleaner import clean_article_fields, clean_location_fields
+
 
 @dataclass
 class DbArticleTable:
     source: str
     url: str
-    year: str | int | None # todo
+    year: int | str | None
     date: date | None
     author: str | None
     title: str
@@ -30,22 +32,9 @@ class DbFile:
 class NormalizedPoliceResult:
     location: DbLocationTable
     article: DbArticleTable
-    html_base64: str
+    html: str
     keywords: set[str]
     article_files: list[DbFile]
-
-
-# Hotfix for some dates being corrupted (either invalid isostring or bad format all together).
-# TODO doesnt work I guess
-# Upstream cause should be already fixed, keep this as a safety net
-def parse_date_fix(date_str: str) -> date | None:
-    if not date_str:
-        return None
-    try:
-        year, month, day = date_str.split('-')
-        return date(int(year), int(month), int(day))
-    except ValueError:
-        return None
 
 
 def police_normalizer(raw_results) -> list[NormalizedPoliceResult]:
@@ -53,23 +42,24 @@ def police_normalizer(raw_results) -> list[NormalizedPoliceResult]:
     for region, region_data in raw_results.items():
         for _, articles in region_data.items():
             for result in articles:
+                cleaned = clean_article_fields(result)
+                cleaned_loc = clean_location_fields(result)
+
                 article_location = DbLocationTable(
-                    region=result["region"],
-                    district=result["district"],
-                    municipality=result["municipality"]
+                    region=cleaned_loc["region"],
+                    district=cleaned_loc["district"],
+                    municipality=cleaned_loc["municipality"]
                 )
-                article_table_result = DbArticleTable (
-                    source = result["source"],
-                    url = result["url"],
-                    year = result["year"],
-                    date= parse_date_fix(result["date"]),
-                    author = result["author"],
-                    title = result["title"],
-                    description = result["description"],
-                    content = result["content"],
+                article_table_result = DbArticleTable(
+                    source=cleaned["source"],
+                    url=cleaned["url"],
+                    year=cleaned["year"],
+                    date=cleaned["date"],
+                    author=cleaned["author"],
+                    title=cleaned["title"],
+                    description=cleaned["description"],
+                    content=cleaned["content"],
                 )
-                article_html64 = result["html_base64"]
-                article_keywords = result["keywords"]
 
                 # Make a list of the files (empty list if None)
                 raw_files = [f for f in (result["files"] or []) if f is not None]
@@ -78,8 +68,8 @@ def police_normalizer(raw_results) -> list[NormalizedPoliceResult]:
                 normalized_result = NormalizedPoliceResult(
                     location=article_location,
                     article=article_table_result,
-                    html_base64=article_html64,
-                    keywords=article_keywords,
+                    html=cleaned["html"],
+                    keywords=result["keywords"],
                     article_files=article_files,
                 )
                 # Add the result and continue with others
