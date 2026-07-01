@@ -49,6 +49,7 @@ class PoliceSql(PgConn):
 
     async def normalize_results(self, domain_name: str) -> list[NormalizedPoliceResult]:
         fp, strategy = db_domain_strat(domain_name)
+        # todo add a middleman "staging" layer which reads the raw files instead of this main DB process
         results = await async_json_read(fp)
         normalized_results = strategy(results)
         self.logger.info(f"Returning normalized results of: '{domain_name}'")

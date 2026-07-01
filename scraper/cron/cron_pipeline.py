@@ -23,7 +23,7 @@ async def run_police_pipeline(cron_max_pages: int | None):
     if found_new_articles:
         await scrape_police_articles()
         async with PoliceSql() as db:
-            db.insert_police_results()
+            await db.insert_police_results()
 
 
 async def run_orchestrator(cron_max_pages: int | None):

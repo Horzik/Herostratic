@@ -1,4 +1,4 @@
-from config import ARTICLES_FP, POLICE_ARTICLES_FP, DEDUPED_FP
+from config import ARTICLES_FP, POLICE_ARTICLES_FP, DEDUPED_FP, POLICE_RESULTS_FP
 import json
 
 
@@ -40,10 +40,29 @@ def dedupe_articles():
     with open(DEDUPED_FP, "w") as d:
         json.dump(de_art, d, indent=2)
 
+def count_duplicate():
+    with open(POLICE_RESULTS_FP, "r") as f:
+        data = json.load(f)
+
+    de_art = {}
+    for domain, urls in data.items():
+        de_art[domain] = list(set(urls))
+
+    original_len = len(data)
+    new_len = len(de_art)
+    all_urls = []
+    for region, region_data in data.items():
+        for district, articles in region_data.items():
+            for article in articles:
+                all_urls.append(article["url"])
+
+    print(f"Total: {len(all_urls)}, Unique: {len(set(all_urls))}")
+    print(f"Found {original_len - new_len} duplicate articles")
 
 def main():
     # dedupe_articles()
-    dedupe_all_articles()
+    count_duplicate()
+    # dedupe_all_articles()
 
 if __name__ == "__main__":
     main()

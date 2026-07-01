@@ -2,12 +2,10 @@ import json
 import urllib
 
 from urllib.request import urlopen
-from config import MUNICIPALITIES_FP, ALL_MUNIS_FP, DISTRICTS_FP, ALL_DISTRICTS_FP
+from config import MUNICIPALITIES_FP, ALL_MUNIS_FP
 
 
-
-"""sFeed a file of czech words in nominative, call the API and get all word-cases for each of the words."""
-
+""" Feed a file of czech words in nominative, call the API and get all word-cases for each of the words. """
 
 # Linguistic research site with nice public api ==> # "https://lindat.mff.cuni.cz/services/morphodita/api-reference.php"
 API_URL = "http://lindat.mff.cuni.cz/services/morphodita/api/generate"
@@ -18,7 +16,7 @@ OUTPUT_FP = ALL_MUNIS_FP
 
 
 def parse_response_for_list(result: str) -> set[str]:
-    """Returns a flat list of all the results in random order."""
+    """ Returns a flat list of all the results in random order. """
     forms = set()
     for line in result.strip().split('\n'):
         if not line.strip():
@@ -29,7 +27,7 @@ def parse_response_for_list(result: str) -> set[str]:
 
 
 def parse_response_for_map(result) -> dict[str, str]:
-    """Returns a dict mapping each case to its nominative."""
+    """ Returns a dict mapping each case to its nominative. """
     form_map = {}
     for line in result.strip().split('\n'):
         if not line.strip():
@@ -43,7 +41,7 @@ def parse_response_for_map(result) -> dict[str, str]:
 
 
 def fetch_data(base_words: set):
-    """Expects a set of words."""
+    """ Expects a set of words. """
     try:
         boundary = "----boundary"
         body = (

@@ -51,12 +51,12 @@ async def insert_article_keyword(db_conn, article_id, keyword):
     """, article_id, keyword
     )
 
-async def insert_article_html(db_conn, article_id, html_base64):
+async def insert_article_html(db_conn, article_id, html):
     await db_conn.execute("""
-        INSERT INTO article_html (article_id, html_base64)
+        INSERT INTO article_html (article_id, html)
         VALUES ($1, $2)
         ON CONFLICT DO NOTHING
-    """, article_id, html_base64
+    """, article_id, html
     )
 
 async def insert_article_files(db_conn, article_id, file_path, file_type):

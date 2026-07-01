@@ -1,4 +1,3 @@
-import base64
 import json
 from asyncio.tasks import gather
 from dataclasses import dataclass
@@ -32,7 +31,7 @@ class ScrapeResult(TypedDict):
     keywords: list[str]
     scraped_at: str
     # has_pictures: bool
-    html_base64: str
+    html: str
 
 
 class AktualneArticlesScraper(BaseScraper):
@@ -120,7 +119,7 @@ class AktualneArticlesScraper(BaseScraper):
             'content': content_text,
             'keywords': keywords,
             'scraped_at': datetime.now(timezone.utc).isoformat(),
-            'html_base64': base64.b64encode(page_bytes).decode("ascii"),
+            'html': page_bytes.decode("utf-8"),
         }
 
         self.logger.info(f"Finished parsing url: '{url}'...")

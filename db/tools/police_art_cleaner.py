@@ -292,9 +292,8 @@ def is_base64(s):
 
 def clean_html(html: str) -> str:
     if is_base64(html):
-        return str(base64.b64decode(html))
-    else:
-        return html
+        return base64.b64decode(html).decode("utf-8", errors="replace")
+    return html
 
 
 # ──────────────────────────────────────────────

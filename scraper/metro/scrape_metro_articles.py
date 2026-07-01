@@ -1,6 +1,5 @@
 import aiofiles
 import asyncio
-import base64
 import json
 import logging
 from asyncio.tasks import gather
@@ -32,7 +31,7 @@ class ArticleResult(TypedDict):
     keywords: set[str]
     scraped_at: str
     # has_pictures: bool
-    html_base64: str
+    html: str
 
 class MetroArticleScraper(BaseScraper):
     """ WIP Scrapes aktualne article links for data. """
@@ -192,7 +191,7 @@ class MetroArticleScraper(BaseScraper):
             'content': content_text,
             'keywords': keywords_from_article,
             'scraped_at': datetime.now(timezone.utc).isoformat(),
-            "html_base64": base64.b64encode(page_bytes).decode("ascii"),
+            "html": page_bytes.decode("utf-8"),
         }
 
         self.logger.info(f"Finished parsing url: '{url}'...")
