@@ -19,8 +19,9 @@ async def insert_article_locations(db_conn, reg, dist, muni):
     """, reg, dist, muni
     )
 
-async def insert_article_data(db_conn, location_id, art_data: DbArticleTable):
-    print(f"Inserting article data: {art_data}")
+async def insert_article_data(db_conn, location_id, art_data: DbArticleTable) -> int | None:
+    """ Return the id if article inserted, else None
+    """
     return await db_conn.fetchval("""
         INSERT INTO articles (location_id, source, url, year, date, author, title, description, content)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)

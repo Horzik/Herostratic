@@ -24,4 +24,11 @@ class ScraperArguments:
             type=int,
             help='''Define how many article listing pages the scraper should check'''
         )
+        p.add_argument(
+            "--insert_only",
+            "-i",
+            dest="insert_only",
+            action='store_true',
+            help='''Only insert already stored articles'''
+        )
         return p

@@ -25,6 +25,9 @@ async def run_police_pipeline(cron_max_pages: int | None):
         async with PoliceSql() as db:
             await db.insert_police_results()
 
+async def push_existing_police_results():
+    async with PoliceSql() as db:
+        await db.insert_police_results()
 
 async def run_orchestrator(cron_max_pages: int | None):
     """ Make a list of all the scrapers and run them in async.
@@ -41,7 +44,10 @@ def cron_main():
     args = ScraperArguments().init_argparse().parse_args()
     max_pages = args.max_pages if args.max_pages else 5
     try:
-        run(run_orchestrator(cron_max_pages=max_pages))
+        if args.insert_only:
+            run(push_existing_police_results())
+        else:
+            run(run_orchestrator(cron_max_pages=max_pages))
     finally:
         logger.info("Stopping cron pipeline...")
         destroy()

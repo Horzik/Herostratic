@@ -82,6 +82,7 @@ POPO_TIMEOUT = 40
 VIDEO_TIMEOUT = 500
 
 # Various
+DB_ADDRESS = "postgresql://postgres@localhost:5432/herostratic"
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m3u8'}
 PIG_RANKS = ['nprap.', 'plk.', 'por.', 'prap.', 'kpt.', 'mjr.', 'pprap.', 'npor.']
 CZECH_MONTHS = {
