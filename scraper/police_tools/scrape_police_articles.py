@@ -5,8 +5,6 @@ import time
 
 from bs4 import BeautifulSoup
 from datetime import timedelta, datetime, timezone
-from io import BytesIO
-from pathlib import Path
 from urllib.parse import urljoin
 
 from config import (
@@ -16,10 +14,9 @@ from config import (
 from scraper.core import BaseScraper
 from scraper.police_tools.police_core import ScrapingStats, PoliceArticleResult, ResBuffer, FileMetadata
 from scraper.site_configs import BASE_POLICE_URL
-from utils.get_file_type import detect_file_category
-from utils.io_utils import atomic_json_write, read_json
+from utils.io_utils import atomic_json_write, read_json, download_file, download_ytb_video
 from utils.logger import LogConfig, destroy
-from utils.network_utils import FetchError, DownloadError
+from utils.network_utils import FetchError
 from utils.parsing_utils import parse_czech_date
 
 
@@ -226,51 +223,6 @@ class PoliceArticlesScraper(BaseScraper):
         else:
             return None
 
-    # todo make into util
-    async def download_ytb_video(self, ytb_url, dir_name) -> tuple[str, str] | None:
-        """Use the 'yt_dlp' lib to download 'youtube' links.
-           Returns a tuple of (file_path, file_type).
-        """
-        import yt_dlp
-        abs_dir: Path = FILES_DIR / dir_name
-        opts = {'outtmpl': str(abs_dir / '%(title)s.%(ext)s'), 'format': 'best[height<=720]', 'quiet': True}
-
-        # Wrapper for non-blocking downloads, returns the title (used as file name)
-        def _download():
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                dl_info = ydl.extract_info(ytb_url, download=True)
-                f_name = ydl.prepare_filename(dl_info)
-                return f_name
-
-        try:
-            file_name = await asyncio.to_thread(_download)
-            rel_path = str(dir_name + '/' + Path(file_name).name)
-            return str(rel_path), 'video'
-        except yt_dlp.utils.DownloadError as e:
-            self.logger.error(f"Error downloading a youtube video from: {dir_name}...")
-            self.logger.error(e)
-            return None
-
-    # todo make into util
-    async def download_file(self, file_url, file_name, dir_name) -> tuple[str, str] | None:
-        """ Saves target {file_url} bytes as {file_name} in {dir_name}.
-            Returns the file_path and file_type.
-        """
-        abs_file_path = FILES_DIR / dir_name / file_name # Where to write the file
-        rel_file_path = dir_name + '/' + file_name # Stored in PG
-
-        file_bytes = BytesIO(await self.fetch(file_url, video=True))
-        file_type = detect_file_category(bytes(file_bytes.getbuffer()[:32])) # Reads the magic bytes and determines the type
-        try:
-            with open(abs_file_path, 'wb') as f:
-                f.write(file_bytes.getbuffer())
-            return str(rel_file_path), file_type
-        except Exception as e:
-            self.logger.error(f"Error downloading file from {dir_name}...")
-            self.logger.error(e)
-            self.stats.failed_articles += 1
-            raise DownloadError
-
     async def parse_gallery_links(self, imgs_el) -> set[FileMetadata]:
         """ Police gallery parser which returns links to the images inside.
             First gets the gallery links and names of all images, then fetches
@@ -368,7 +320,8 @@ class PoliceArticlesScraper(BaseScraper):
             for i, (file_url, file_name) in enumerate(files_links):
                 self.logger.debug(f"Downloading file url: {file_url} with name: {file_name}")
                 clean_file_name = f"{i}_" + file_name.replace('/', '_').replace('\\', '_')
-                result = await self.download_file(file_url, clean_file_name, dir_name)
+                file_bytes = await self.fetch(file_url, video=True)
+                result = download_file(file_bytes, clean_file_name, dir_name)
                 if result is not None:
                     files_results.append(result)
 
@@ -378,7 +331,7 @@ class PoliceArticlesScraper(BaseScraper):
             if not file_dir_abs_path.is_dir():
                 file_dir_abs_path.mkdir(parents=True, exist_ok=True)
             for ytb_url in ytb_urls:
-                dl_res = await self.download_ytb_video(ytb_url, dir_name)
+                dl_res = await download_ytb_video(ytb_url, dir_name)
                 if dl_res:
                     files_results.append(dl_res)
 

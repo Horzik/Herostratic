@@ -9,9 +9,10 @@ from pathlib import Path
 
 import aiofiles
 
-from config import LOG_DIR, ERRORS_LOG_FP, DECODE_FORMATS, INPUT_DIR
+from config import LOG_DIR, ERRORS_LOG_FP, DECODE_FORMATS, FILES_DIR
+from utils.errors import YoutubeDownloadError, DownloadError
+from utils.get_file_type import detect_file_metadata
 from utils.logger import LogConfig, init_logging, get_logger
-
 
 logConfig = LogConfig(
         log_level=logging.DEBUG,
@@ -23,6 +24,7 @@ init_logging(logConfig)
 logger = get_logger('io_utils')
 
 
+#todo migrate to errors
 class CriticalDataError(Exception):
     """Use if writing goes wrong."""
     pass
@@ -104,3 +106,54 @@ async def parse_xml_tree(content_bytes: bytes, url: str) -> ET.Element | None:
             continue
     else:
         return logger.warning(f"Could not parse {url} with any encoding")
+
+
+def mk_filename_w_extension(file_name: str, extension: str | None) -> str:
+    if not extension:
+        return file_name
+
+    path = Path(file_name)
+    stem = path.stem.rstrip('. ') or 'file'
+    return f"{stem}{extension}"
+
+
+# Wrapper for non-blocking downloads, returns the title (used as file name)
+def download_yt(ytb_url: str, options: dict[str, str | bool]):
+    import yt_dlp
+    with yt_dlp.YoutubeDL(options) as ydl:
+        dl_info = ydl.extract_info(ytb_url, download=True)
+        f_name = ydl.prepare_filename(dl_info)
+        return f_name
+
+
+async def download_ytb_video(ytb_url: str, dir_name: str) -> tuple[str, str] | None:
+    """ Use the 'yt_dlp' lib to download 'youtube' links.
+
+        Returns a tuple of (file_path, file_type).
+    """
+    import yt_dlp
+    abs_dir: Path = FILES_DIR / dir_name
+    options: dict[str, str | bool] = {'outtmpl': str(abs_dir / '%(title)s.%(ext)s'), 'format': 'best[height<=720]', 'quiet': True}
+    try:
+        file_name = await asyncio.to_thread(download_yt, ytb_url, options)
+        rel_path = str(dir_name + '/' + Path(file_name).name)
+        return str(rel_path), 'video'
+    except yt_dlp.utils.DownloadError as e:
+        raise YoutubeDownloadError()
+
+
+def download_file(file_bytes, file_name, dir_name) -> tuple[str, str] | None:
+    """ Saves target {file_bytes} as {file_name} in {dir_name}.
+
+        Returns the file_path and file_type.
+    """
+    metadata = detect_file_metadata(file_bytes[:512], file_name)
+    file_name = mk_filename_w_extension(file_name, metadata.extension)
+    abs_file_path = FILES_DIR / dir_name / file_name # Where to write the file
+    rel_file_path = dir_name + '/' + file_name # Stored in PG
+    try:
+        with open(abs_file_path, 'wb') as f:
+            f.write(file_bytes)
+        return str(rel_file_path), metadata.file_type
+    except Exception as e:
+        raise DownloadError()

@@ -1,13 +1,11 @@
-# Don't commit Python cache
+# Python cache
 __pycache__/
 data/__pycache__/
 scraper/__pycache__/
 *.py[cod]
 
-# Don't commit IDE settings
+# Local settings
 .idea/
-
-# Don't commit virtual environment
 .venv/
 
 # Input files
@@ -19,6 +17,3 @@ data/input/police_sites.txt
 /data/logs
 /data/files
 /trash_bin
-
-#
-notes_and_todos
